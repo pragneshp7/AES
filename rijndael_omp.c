@@ -1,7 +1,13 @@
 #include <stdio.h>
 #include <memory.h>
+#include <omp.h>
+#include <time.h>
 
 #include "rijndael.h"
+double gtod_timer(void);    // timer prototype
+
+
+//icpc -Wall -xHost -O2 -qopenmp rijndael_omp.c -o out2
 
 //
 // Public Definitions
@@ -191,12 +197,15 @@ void aes_add_round_key(AES_CYPHER_T mode, uint8_t *state,
 void aes_sub_bytes(AES_CYPHER_T mode, uint8_t *state)
 {
     int i, j;
-   
+	#pragma omp parallel
+	{
+	#pragma omp for collapse(2)
     for (i = 0; i < g_aes_nb[mode]; i++) {
         for (j = 0; j < 4; j++) {
             state[i * 4 + j] = aes_sub_sbox(state[i * 4 + j]);
         }
     }
+	}
 }
 
 void aes_shift_rows(AES_CYPHER_T mode, uint8_t *state)
@@ -283,7 +292,8 @@ int aes_encrypt(AES_CYPHER_T mode, uint8_t *data, int len, uint8_t *key)
     uint8_t s[4 * 4] = {0}; /* state */
    
     int nr, i, j;
-   
+    double time, t0, t1;
+
     /* key expansion */
     aes_key_expansion(mode, key, w);
    
@@ -303,11 +313,14 @@ int aes_encrypt(AES_CYPHER_T mode, uint8_t *data, int len, uint8_t *key)
            // aes_dump("input", s, 4 * g_aes_nb[mode]);
            
             if (nr > 0) {
-               
+				t0 = omp_get_wtime();
                 /* do SubBytes */
                 aes_sub_bytes(mode, s);
                // aes_dump("  sub", s, 4 * g_aes_nb[mode]);
-               
+                t1 = omp_get_wtime();
+				time = t1 - t0;
+				printf("time: %lf\n",time);
+
                 /* do ShiftRows */
                 aes_shift_rows(mode, s);
                // aes_dump("  shift", s, 4 * g_aes_nb[mode]);
@@ -638,18 +651,32 @@ void aes_cypher_256_test()
     aes_dump("key ",  key, sizeof(key));
     aes_encrypt(AES_CYPHER_256, buf, sizeof(buf), key);
    
-    printf("\nAES_CYPHER_256 decrypt test case:\n");
-    printf("Input:\n");
-    aes_dump("data", buf, sizeof(buf));
-    aes_dump("key ",  key, sizeof(key));
-    aes_decrypt(AES_CYPHER_256, buf, sizeof(buf), key);
+   // printf("\nAES_CYPHER_256 decrypt test case:\n");
+   // printf("Input:\n");
+   // aes_dump("data", buf, sizeof(buf));
+   // aes_dump("key ",  key, sizeof(key));
+   // aes_decrypt(AES_CYPHER_256, buf, sizeof(buf), key);
 }
 
 int main()
 {
-	aes_cypher_128_test();
-	aes_cypher_192_test();
+	int nt = 4;
+
+	#ifdef _OPENMP
+	#pragma omp parallel private(nt)
+	{ nt = omp_get_num_threads(); if(nt<1) printf("NO print, OMP warmup.\n"); }
+	#endif
+	
+	omp_set_num_threads(nt);
+
+   // t0 = gtod_timer();
+
+	//aes_cypher_128_test();
+	//aes_cypher_192_test();
 	aes_cypher_256_test();
+
+	//t1 = gtod_timer();
+	//time  = t1 - t0;
 
 	return 0;
 }

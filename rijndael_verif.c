@@ -1,7 +1,13 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <memory.h>
-
+#include <time.h>
+#include <string.h>
 #include "rijndael.h"
+
+#define PAGE_SIZE 8 //8 - 1K
+
+//icpc -Wall -xHost -O2 -qopenmp rijndael_omp.c -o out2
 
 //
 // Public Definitions
@@ -140,7 +146,7 @@ uint32_t aes_swap_dword(uint32_t val)
  * nk: number of 32-bit words comprising cipher key, nk = 4, 6, 8 (KeyLength/(4*8))
  */
 
-void aes_key_expansion(AES_CYPHER_T mode, uint8_t *key, uint8_t *round)
+void aes_key_expansion(uint8_t *key, uint8_t *round)
 {
     uint32_t *w = (uint32_t *)round;
     uint32_t  t;
@@ -150,67 +156,66 @@ void aes_key_expansion(AES_CYPHER_T mode, uint8_t *key, uint8_t *round)
     do {
         w[i] = *((uint32_t *)&key[i * 4 + 0]);
         //printf("    %2.2d:  rs: %8.8x\n", i, aes_swap_dword(w[i]));
-    } while (++i < g_aes_nk[mode]);
+    } while (++i < 8);
    
     do {
         //printf("    %2.2d: ", i);
-        if ((i % g_aes_nk[mode]) == 0) {
+        if ((i % 8) == 0) {
             t = aes_rot_dword(w[i - 1]);
             //printf(" rot: %8.8x", aes_swap_dword(t));
             t = aes_sub_dword(t);
             //printf(" sub: %8.8x", aes_swap_dword(t));
-            //printf(" rcon: %8.8x", g_aes_rcon[i/g_aes_nk[mode] - 1]);
-            t = t ^ aes_swap_dword(g_aes_rcon[i/g_aes_nk[mode] - 1]);
+            //printf(" rcon: %8.8x", g_aes_rcon[i/8 - 1]);
+            t = t ^ aes_swap_dword(g_aes_rcon[i/8 - 1]);
             //printf(" xor: %8.8x", t);
-        } else if (g_aes_nk[mode] > 6 && (i % g_aes_nk[mode]) == 4) {
+        } else if ((i % 8) == 4) {
             t = aes_sub_dword(w[i - 1]);
             //printf(" sub: %8.8x", aes_swap_dword(t));
         } else {
             t = w[i - 1];
             //printf(" equ: %8.8x", aes_swap_dword(t));
         }
-        w[i] = w[i - g_aes_nk[mode]] ^ t;
+        w[i] = w[i - 8] ^ t;
         //printf(" rs: %8.8x\n", aes_swap_dword(w[i]));
-    } while (++i < g_aes_nb[mode] * (g_aes_rounds[mode] + 1));
+    } while (++i < 4 * (15));
    
     /* key can be discarded (or zeroed) from memory */
 }
 
-void aes_add_round_key(AES_CYPHER_T mode, uint8_t *state,
+void aes_add_round_key(uint8_t *state,
                        uint8_t *round, int nr)
 {
     uint32_t *w = (uint32_t *)round;
     uint32_t *s = (uint32_t *)state;
     int i;
    
-    for (i = 0; i < g_aes_nb[mode]; i++) {
-        s[i] ^= w[nr * g_aes_nb[mode] + i];
+    for (i = 0; i < 4; i++) {
+        s[i] ^= w[nr * 4 + i];
     }
 }
 
-void aes_sub_bytes(AES_CYPHER_T mode, uint8_t *state)
+void aes_sub_bytes(uint8_t *state)
 {
     int i, j;
-   
-    for (i = 0; i < g_aes_nb[mode]; i++) {
+    for (i = 0; i < 4; i++) {
         for (j = 0; j < 4; j++) {
             state[i * 4 + j] = aes_sub_sbox(state[i * 4 + j]);
         }
-    }
+	}
 }
 
-void aes_shift_rows(AES_CYPHER_T mode, uint8_t *state)
+void aes_shift_rows(uint8_t *state)
 {
     uint8_t *s = (uint8_t *)state;
     int i, j, r;
    
-    for (i = 1; i < g_aes_nb[mode]; i++) {
+    for (i = 1; i < 4; i++) {
         for (j = 0; j < i; j++) {
             uint8_t tmp = s[i];
-            for (r = 0; r < g_aes_nb[mode]; r++) {
+            for (r = 0; r < 4; r++) {
                 s[i + r * 4] = s[i + (r + 1) * 4];
             }
-            s[i + (g_aes_nb[mode] - 1) * 4] = tmp;
+            s[i + (4 - 1) * 4] = tmp;
         }
     }
 }
@@ -246,13 +251,13 @@ uint8_t aes_mul(uint8_t x, uint8_t y)
             (((y >> 7) & 1) * aes_xtimes(x, 7)) );
 }
 
-void aes_mix_columns(AES_CYPHER_T mode, uint8_t *state)
+void aes_mix_columns(uint8_t *state)
 {
     uint8_t y[16] = { 2, 3, 1, 1,  1, 2, 3, 1,  1, 1, 2, 3,  3, 1, 1, 2};
     uint8_t s[4];
     int i, j, r;
    
-    for (i = 0; i < g_aes_nb[mode]; i++) {
+    for (i = 0; i < 4; i++) {
         for (r = 0; r < 4; r++) {
             s[r] = 0;
             for (j = 0; j < 4; j++) {
@@ -277,138 +282,75 @@ void aes_dump(char *msg, uint8_t *data, int len)
     printf("\n");
 }
 
-int aes_encrypt(AES_CYPHER_T mode, uint8_t *data, int len, uint8_t *key)
+int aes_encrypt(uint8_t *data, int len, uint8_t *key)
 {
     uint8_t w[4 * 4 * 15] = {0}; /* round key */
     uint8_t s[4 * 4] = {0}; /* state */
    
     int nr, i, j;
-   
+
     /* key expansion */
-    aes_key_expansion(mode, key, w);
+    aes_key_expansion(key, w);
    
     /* start data cypher loop over input buffer */
-    for (i = 0; i < len; i += 4 * g_aes_nb[mode]) {
+    for (i = 0; i < len; i += 4 * 4) {
 
         //printf("Encrypting block at %u ...\n", i);
 
         /* init state from user buffer (plaintext) */
-        for (j = 0; j < 4 * g_aes_nb[mode]; j++)
+        for (j = 0; j < 4 * 4; j++)
             s[j] = data[i + j];
        
         /* start AES cypher loop over all AES rounds */
-        for (nr = 0; nr <= g_aes_rounds[mode]; nr++) {
+        for (nr = 0; nr <= 14; nr++) {
            
             //printf(" Round %d:\n", nr);
-           // aes_dump("input", s, 4 * g_aes_nb[mode]);
+           // aes_dump("input", s, 4 * 4);
            
             if (nr > 0) {
-               
                 /* do SubBytes */
-                aes_sub_bytes(mode, s);
-               // aes_dump("  sub", s, 4 * g_aes_nb[mode]);
-               
+                aes_sub_bytes(s);
+               // aes_dump("  sub", s, 4 * 4);
                 /* do ShiftRows */
-                aes_shift_rows(mode, s);
-               // aes_dump("  shift", s, 4 * g_aes_nb[mode]);
+                aes_shift_rows(s);
+               // aes_dump("  shift", s, 4 * 4);
                
-                if (nr < g_aes_rounds[mode]) {
+                if (nr < 14) {
                     /* do MixColumns */
-                    aes_mix_columns(mode, s);
-                  //  aes_dump("  mix", s, 4 * g_aes_nb[mode]);
+                    aes_mix_columns(s);
+                  //  aes_dump("  mix", s, 4 * 4);
                 }
             }
            
             /* do AddRoundKey */
-            aes_add_round_key(mode, s, w, nr);
-           // aes_dump("  round", &w[nr * 4 * g_aes_nb[mode]], 4 * g_aes_nb[mode]);
-            //aes_dump("  state", s, 4 * g_aes_nb[mode]);
+            aes_add_round_key(s, w, nr);
+           // aes_dump("  round", &w[nr * 4 * 4], 4 * 4);
+            //aes_dump("  state", s, 4 * 4);
         }
        
         /* save state (cypher) to user buffer */
-        for (j = 0; j < 4 * g_aes_nb[mode]; j++)
+        for (j = 0; j < 4 * 4; j++)
             data[i + j] = s[j];
         printf("Output:\n");
-        aes_dump("cypher", &data[i], 4 * g_aes_nb[mode]);
+        aes_dump("cypher", &data[i], 4 * 4);
     }
    
     return 0;
 }
 
-int aes_encrypt_ecb(AES_CYPHER_T mode, uint8_t *data, int len, uint8_t *key)
-{
-    return aes_encrypt(mode, data, len, key);
-}
 
-int aes_encrypt_cbc(AES_CYPHER_T mode, uint8_t *data, int len, uint8_t *key, uint8_t *iv)
-{
-    uint8_t w[4 * 4 * 15] = {0}; /* round key */
-    uint8_t s[4 * 4] = {0}; /* state */
-    uint8_t v[4 * 4] = {0}; /* iv */
-   
-    int nr, i, j;
-   
-
-    /* key expansion */
-    aes_key_expansion(mode, key, w);
-
-    memcpy(v, iv, sizeof(v));
-   
-    /* start data cypher loop over input buffer */
-    for (i = 0; i < len; i += 4 * g_aes_nb[mode]) {
-
-        /* init state from user buffer (plaintext) */
-        for (j = 0; j < 4 * g_aes_nb[mode]; j++)
-            s[j] = data[i + j] ^ v[j];
-       
-        /* start AES cypher loop over all AES rounds */
-        for (nr = 0; nr <= g_aes_rounds[mode]; nr++) {
-           
-         //   aes_dump("input", s, 4 * g_aes_nb[mode]);
-           
-            if (nr > 0) {
-               
-                /* do SubBytes */
-                aes_sub_bytes(mode, s);
-             //   aes_dump("  sub", s, 4 * g_aes_nb[mode]);
-               
-                /* do ShiftRows */
-                aes_shift_rows(mode, s);
-             //   aes_dump("  shift", s, 4 * g_aes_nb[mode]);
-               
-                if (nr < g_aes_rounds[mode]) {
-                    /* do MixColumns */
-                    aes_mix_columns(mode, s);
-              //      aes_dump("  mix", s, 4 * g_aes_nb[mode]);
-                }
-            }
-           
-            /* do AddRoundKey */
-            aes_add_round_key(mode, s, w, nr);
-           // aes_dump("  round", &w[nr * 4 * g_aes_nb[mode]], 4 * g_aes_nb[mode]);
-           // aes_dump("  state", s, 4 * g_aes_nb[mode]);
-        }
-       
-        /* save state (cypher) to user buffer */
-        for (j = 0; j < 4 * g_aes_nb[mode]; j++)
-            data[i + j] = v[j] = s[j];
-    }
-   
-    return 0;
-}
-
-void inv_shift_rows(AES_CYPHER_T mode, uint8_t *state)
+void inv_shift_rows(uint8_t *state)
 {
     uint8_t *s = (uint8_t *)state;
     int i, j, r;
    
-    for (i = 1; i < g_aes_nb[mode]; i++) {
-        for (j = 0; j < g_aes_nb[mode] - i; j++) {
+    for (i = 1; i < 4; i++) {
+        for (j = 0; j < 4 - i; j++) {
             uint8_t tmp = s[i];
-            for (r = 0; r < g_aes_nb[mode]; r++) {
+            for (r = 0; r < 4; r++) {
                 s[i + r * 4] = s[i + (r + 1) * 4];
             }
-            s[i + (g_aes_nb[mode] - 1) * 4] = tmp;
+            s[i + (4 - 1) * 4] = tmp;
         }
     }
 }
@@ -419,25 +361,25 @@ uint8_t inv_sub_sbox(uint8_t val)
 }
 
 
-void inv_sub_bytes(AES_CYPHER_T mode, uint8_t *state)
+void inv_sub_bytes(uint8_t *state)
 {
     int i, j;
    
-    for (i = 0; i < g_aes_nb[mode]; i++) {
+    for (i = 0; i < 4; i++) {
         for (j = 0; j < 4; j++) {
             state[i * 4 + j] = inv_sub_sbox(state[i * 4 + j]);
         }
     }
 }
 
-void inv_mix_columns(AES_CYPHER_T mode, uint8_t *state)
+void inv_mix_columns(uint8_t *state)
 {
     uint8_t y[16] = { 0x0e, 0x0b, 0x0d, 0x09,  0x09, 0x0e, 0x0b, 0x0d,
                       0x0d, 0x09, 0x0e, 0x0b,  0x0b, 0x0d, 0x09, 0x0e};
     uint8_t s[4];
     int i, j, r;
    
-    for (i = 0; i < g_aes_nb[mode]; i++) {
+    for (i = 0; i < 4; i++) {
         for (r = 0; r < 4; r++) {
             s[r] = 0;
             for (j = 0; j < 4; j++) {
@@ -450,7 +392,7 @@ void inv_mix_columns(AES_CYPHER_T mode, uint8_t *state)
     }
 }
 
-int aes_decrypt(AES_CYPHER_T mode, uint8_t *data, int len, uint8_t *key)
+int aes_decrypt(uint8_t *data, int len, uint8_t *key)
 {
     uint8_t w[4 * 4 * 15] = {0}; /* round key */
     uint8_t s[4 * 4] = {0}; /* state */
@@ -458,170 +400,56 @@ int aes_decrypt(AES_CYPHER_T mode, uint8_t *data, int len, uint8_t *key)
     int nr, i, j;
    
     /* key expansion */
-    aes_key_expansion(mode, key, w);
+    aes_key_expansion(key, w);
    
     /* start data cypher loop over input buffer */
-    for (i = 0; i < len; i += 4 * g_aes_nb[mode]) {
+    for (i = 0; i < len; i += 4 * 4) {
        
         //printf("Decrypting block at %u ...\n", i);
        
         /* init state from user buffer (cyphertext) */
-        for (j = 0; j < 4 * g_aes_nb[mode]; j++)
+        for (j = 0; j < 4 * 4; j++)
             s[j] = data[i + j];
        
         /* start AES cypher loop over all AES rounds */
-        for (nr = g_aes_rounds[mode]; nr >= 0; nr--) {
+        for (nr = 14; nr >= 0; nr--) {
            
             //printf(" Round %d:\n", nr);
-          //  aes_dump("input", s, 4 * g_aes_nb[mode]);
+          //  aes_dump("input", s, 4 * 4);
 
             /* do AddRoundKey */
-            aes_add_round_key(mode, s, w, nr);
-          //  aes_dump("  round", &w[nr * 4 * g_aes_nb[mode]], 4 * g_aes_nb[mode]);
+            aes_add_round_key(s, w, nr);
+          //  aes_dump("  round", &w[nr * 4 * 4], 4 * 4);
 
 
             if (nr > 0) {
 
-                if (nr < g_aes_rounds[mode]) {
-                 //   aes_dump("  mix", s, 4 * g_aes_nb[mode]);
+                if (nr < 14) {
+                 //   aes_dump("  mix", s, 4 * 4);
                     /* do MixColumns */
-                    inv_mix_columns(mode, s);
+                    inv_mix_columns(s);
                 }
 
                 /* do ShiftRows */
-               // aes_dump("  shift", s, 4 * g_aes_nb[mode]);
-                inv_shift_rows(mode, s);
+               // aes_dump("  shift", s, 4 * 4);
+                inv_shift_rows(s);
 
                 /* do SubBytes */
-                //aes_dump("  sub", s, 4 * g_aes_nb[mode]);
-                inv_sub_bytes(mode, s);
+                //aes_dump("  sub", s, 4 * 4);
+                inv_sub_bytes(s);
             }
            
-           // aes_dump("  state", s, 4 * g_aes_nb[mode]);
+           // aes_dump("  state", s, 4 * 4);
         }
        
         /* save state (cypher) to user buffer */
-        for (j = 0; j < 4 * g_aes_nb[mode]; j++)
+        for (j = 0; j < 4 * 4; j++)
             data[i + j] = s[j];
         printf("Output:\n");
-        aes_dump("plain", &data[i], 4 * g_aes_nb[mode]);
+        aes_dump("plain", &data[i], 4 * 4);
     }
    
     return 0;
-}
-
-int aes_decrypt_ecb(AES_CYPHER_T mode, uint8_t *data, int len, uint8_t *key)
-{
-    return aes_decrypt(mode, data, len, key);
-}
-
-int aes_decrypt_cbc(AES_CYPHER_T mode, uint8_t *data, int len, uint8_t *key, uint8_t *iv)
-{
-    uint8_t w[4 * 4 * 15] = {0}; /* round key */
-    uint8_t s[4 * 4] = {0}; /* state */
-    uint8_t v[4 * 4] = {0}; /* iv */
-
-   
-    int nr, i, j;
-   
-    /* key expansion */
-    aes_key_expansion(mode, key, w);
-   
-    memcpy(v, iv, sizeof(v));
-
-    /* start data cypher loop over input buffer */
-    for (i = 0; i < len; i += 4 * g_aes_nb[mode]) {
-       
-       
-        /* init state from user buffer (cyphertext) */
-        for (j = 0; j < 4 * g_aes_nb[mode]; j++)
-            s[j] = data[i + j];
-       
-        /* start AES cypher loop over all AES rounds */
-        for (nr = g_aes_rounds[mode]; nr >= 0; nr--) {
-           
-          //  aes_dump("input", s, 4 * g_aes_nb[mode]);
-
-            /* do AddRoundKey */
-            aes_add_round_key(mode, s, w, nr);
-            //aes_dump("  round", &w[nr * 4 * g_aes_nb[mode]], 4 * g_aes_nb[mode]);
-
-
-            if (nr > 0) {
-
-                if (nr < g_aes_rounds[mode]) {
-                 //   aes_dump("  mix", s, 4 * g_aes_nb[mode]);
-                    /* do MixColumns */
-                    inv_mix_columns(mode, s);
-                }
-
-                /* do ShiftRows */
-              //  aes_dump("  shift", s, 4 * g_aes_nb[mode]);
-                inv_shift_rows(mode, s);
-
-                /* do SubBytes */
-                //aes_dump("  sub", s, 4 * g_aes_nb[mode]);
-                inv_sub_bytes(mode, s);
-            }
-           
-           // aes_dump("  state", s, 4 * g_aes_nb[mode]);
-        }
-       
-        /* save state (cypher) to user buffer */
-        for (j = 0; j < 4 * g_aes_nb[mode]; j++) {
-            uint8_t p = s[j] ^ v[j];
-            v[j] = data[i + j];
-            data[i + j] = p;
-        }
-    }
-   
-    return 0;
-}
-
-void aes_cypher_128_test()
-{
-#if 1
-    uint8_t buf[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-                      0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
-    uint8_t key[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-                      0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f };
-#else
-    uint8_t buf[] = { 0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d,
-                      0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34 };
-    uint8_t key[] = { 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6,
-                      0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c };
-#endif
-    printf("\nAES_CYPHER_128 encrypt test case:\n");
-    printf("Input:\n");
-    aes_dump("data", buf, sizeof(buf));
-    aes_dump("key ",  key, sizeof(key));
-    aes_encrypt(AES_CYPHER_128, buf, sizeof(buf), key);
-
-    printf("\nAES_CYPHER_128 decrypt test case:\n");
-    printf("Input:\n");
-    aes_dump("data", buf, sizeof(buf));
-    aes_dump("key ",  key, sizeof(key));
-    aes_decrypt(AES_CYPHER_128, buf, sizeof(buf), key);
-}
-
-void aes_cypher_192_test()
-{
-    uint8_t buf[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-                      0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
-    uint8_t key[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-                      0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-                      0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17 };
-    printf("\nAES_CYPHER_192 encrypt test case:\n");
-    printf("Input:\n");
-    aes_dump("data", buf, sizeof(buf));
-    aes_dump("key ",  key, sizeof(key));
-    aes_encrypt(AES_CYPHER_192, buf, sizeof(buf), key);
-   
-    printf("\nAES_CYPHER_192 decrypt test case:\n");
-    printf("Input:\n");
-    aes_dump("data", buf, sizeof(buf));
-    aes_dump("key ",  key, sizeof(key));
-    aes_decrypt(AES_CYPHER_192, buf, sizeof(buf), key);
 }
 
 void aes_cypher_256_test()
@@ -636,21 +464,64 @@ void aes_cypher_256_test()
     printf("Input:\n");
     aes_dump("data", buf, sizeof(buf));
     aes_dump("key ",  key, sizeof(key));
-    aes_encrypt(AES_CYPHER_256, buf, sizeof(buf), key);
+    aes_encrypt(buf, sizeof(buf), key);
    
-    printf("\nAES_CYPHER_256 decrypt test case:\n");
-    printf("Input:\n");
-    aes_dump("data", buf, sizeof(buf));
-    aes_dump("key ",  key, sizeof(key));
-    aes_decrypt(AES_CYPHER_256, buf, sizeof(buf), key);
+   // printf("\nAES_CYPHER_256 decrypt test case:\n");
+   // printf("Input:\n");
+   // aes_dump("data", buf, sizeof(buf));
+   // aes_dump("key ",  key, sizeof(key));
+   // aes_decrypt(buf, sizeof(buf), key);
 }
 
 int main()
 {
-	aes_cypher_128_test();
-	aes_cypher_192_test();
+	uint8_t buf[16], enc_buf[16], dec_buf[16];
+	int count = 0;
+	int ret;
+	unsigned seed = (unsigned) clock();
+	uint8_t key[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                      0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                      0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+                      0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f};
+	
 	aes_cypher_256_test();
 
+	for (int k = 0; k < PAGE_SIZE;	k++){
+		for (int i = 0; i<16; i++){
+			buf[i] = rand_r(&seed)/256;
+		}
+	
+		memcpy(enc_buf,buf,sizeof(buf));
+		//aes_dump("enc_buf", enc_buf, sizeof(enc_buf));
+
+		printf("\nAES_CYPHER_256 encrypt test case:\n");
+		printf("Input:\n");
+		aes_dump("data", buf, sizeof(buf));
+		aes_dump("key ",  key, sizeof(key));
+		aes_encrypt(buf, sizeof(buf), key);
+   
+	
+		printf("\nAES_CYPHER_256 decrypt test case:\n");
+		printf("Input:\n");
+		aes_dump("data", buf, sizeof(buf));
+		aes_dump("key ",  key, sizeof(key));
+		aes_decrypt(buf, sizeof(buf), key);
+		//aes_dump("dec_buf", buf, sizeof(buf));
+
+		memcpy(dec_buf,buf,sizeof(buf));
+	
+		ret = memcmp(enc_buf, dec_buf, sizeof(enc_buf));
+
+		if(ret != 0) count += 1;
+	}
+	
+	if (count != 0) {
+		printf("Encryption failed %d times\n", count);
+	}
+	else {
+		printf("All encryptions passed\n");
+	}
+	
 	return 0;
 }
 
