@@ -282,15 +282,15 @@ void aes_dump(char *msg, uint8_t *data, int len)
     printf("\n");
 }
 
-int aes_encrypt(uint8_t *data, int len, uint8_t *key)
+int aes_encrypt(uint8_t *data, int len, uint8_t *key, uint8_t *w)
 {
-    uint8_t w[4 * 4 * 15] = {0}; /* round key */
+    //uint8_t w[4 * 4 * 15] = {0}; /* round key */
     uint8_t s[4 * 4] = {0}; /* state */
    
     int nr, i, j;
 
     /* key expansion */
-    aes_key_expansion(key, w);
+    //aes_key_expansion(key, w);
    
     /* start data cypher loop over input buffer */
     for (i = 0; i < len; i += 4 * 4) {
@@ -452,7 +452,7 @@ int aes_decrypt(uint8_t *data, int len, uint8_t *key)
     return 0;
 }
 
-void aes_cypher_256_test()
+/*void aes_cypher_256_test()
 {
     uint8_t buf[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
                       0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
@@ -471,7 +471,7 @@ void aes_cypher_256_test()
    // aes_dump("data", buf, sizeof(buf));
    // aes_dump("key ",  key, sizeof(key));
    // aes_decrypt(buf, sizeof(buf), key);
-}
+}*/
 
 int main()
 {
@@ -486,6 +486,9 @@ int main()
 	
 	//aes_cypher_256_test();
 
+	uint8_t w[4 * 4 * 15] = {0}; /* round key */
+	aes_key_expansion(key, w);
+	
 	for (int k = 0; k < PAGE_SIZE;	k++){
 		for (int i = 0; i<16; i++){
 			buf[i] = rand_r(&seed)/256;
@@ -498,7 +501,7 @@ int main()
 		//printf("Input:\n");
 		//aes_dump("data", buf, sizeof(buf));
 		//aes_dump("key ",  key, sizeof(key));
-		aes_encrypt(buf, sizeof(buf), key);
+		aes_encrypt(buf, sizeof(buf), key, w);
    
 	
 		//printf("\nAES_CYPHER_256 decrypt test case:\n");

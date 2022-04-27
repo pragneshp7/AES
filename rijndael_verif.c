@@ -5,7 +5,7 @@
 #include <string.h>
 #include "rijndael.h"
 
-#define PAGE_SIZE 1024 //8 - 1K
+#define PAGE_SIZE 8 //8 - 1Kbits, 1024 - 128Kbits
 
 //icpc -Wall -xHost -O2 -qopenmp rijndael_omp.c -o out2
 
@@ -282,15 +282,15 @@ void aes_dump(char *msg, uint8_t *data, int len)
     printf("\n");
 }
 
-int aes_encrypt(uint8_t *data, int len, uint8_t *key)
+int aes_encrypt(uint8_t *data, int len, uint8_t *key, uint8_t *w)
 {
-    uint8_t w[4 * 4 * 15] = {0}; /* round key */
+    //uint8_t w[4 * 4 * 15] = {0}; /* round key */
     uint8_t s[4 * 4] = {0}; /* state */
    
     int nr, i, j;
 
     /* key expansion */
-    aes_key_expansion(key, w);
+    //aes_key_expansion(key, w);
    
     /* start data cypher loop over input buffer */
     for (i = 0; i < len; i += 4 * 4) {
@@ -331,8 +331,8 @@ int aes_encrypt(uint8_t *data, int len, uint8_t *key)
         /* save state (cypher) to user buffer */
         for (j = 0; j < 4 * 4; j++)
             data[i + j] = s[j];
-        //printf("Output:\n");
-        //aes_dump("cypher", &data[i], 4 * 4);
+        printf("Output:\n");
+        aes_dump("cypher", &data[i], 4 * 4);
     }
    
     return 0;
@@ -452,7 +452,7 @@ int aes_decrypt(uint8_t *data, int len, uint8_t *key)
     return 0;
 }
 
-void aes_cypher_256_test()
+/*void aes_cypher_256_test()
 {
     uint8_t buf[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
                       0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
@@ -471,7 +471,7 @@ void aes_cypher_256_test()
    // aes_dump("data", buf, sizeof(buf));
    // aes_dump("key ",  key, sizeof(key));
    // aes_decrypt(buf, sizeof(buf), key);
-}
+}*/
 
 int main()
 {
@@ -486,6 +486,18 @@ int main()
 	
 	//aes_cypher_256_test();
 
+	uint8_t w[4 * 4 * 15] = {0}; /* round key */
+	aes_key_expansion(key, w);
+	
+	//base test - output should be cypher:  8e a2 b7 ca 51 67 45 bf ea fc 49 90 4b 49 60 89
+	uint8_t buf2[16] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+              0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
+	printf("\nAES_CYPHER_256 encrypt test case:\n");
+    printf("Input:\n");
+    aes_dump("data", buf2, sizeof(buf2));
+    aes_dump("key ",  key, sizeof(key));
+    aes_encrypt(buf2, sizeof(buf2), key, w);
+	
 	for (int k = 0; k < PAGE_SIZE;	k++){
 		for (int i = 0; i<16; i++){
 			buf[i] = rand_r(&seed)/256;
@@ -498,7 +510,7 @@ int main()
 		//printf("Input:\n");
 		//aes_dump("data", buf, sizeof(buf));
 		//aes_dump("key ",  key, sizeof(key));
-		aes_encrypt(buf, sizeof(buf), key);
+		aes_encrypt(buf, sizeof(buf), key, w);
    
 	
 		//printf("\nAES_CYPHER_256 decrypt test case:\n");
