@@ -491,7 +491,7 @@ int main()
 			buf[i] = rand_r(&seed)/256;
 		}
 	
-		memcpy(enc_buf,buf,sizeof(buf));
+		//memcpy(enc_buf,buf,sizeof(buf));
 		//aes_dump("enc_buf", enc_buf, sizeof(enc_buf));
 
 		//printf("\nAES_CYPHER_256 encrypt test case:\n");
@@ -505,22 +505,22 @@ int main()
 		//printf("Input:\n");
 		//aes_dump("data", buf, sizeof(buf));
 		//aes_dump("key ",  key, sizeof(key));
-		aes_decrypt(buf, sizeof(buf), key);
+		//aes_decrypt(buf, sizeof(buf), key);
 		//aes_dump("dec_buf", buf, sizeof(buf));
 
-		memcpy(dec_buf,buf,sizeof(buf));
+		//memcpy(dec_buf,buf,sizeof(buf));
 	
-		ret = memcmp(enc_buf, dec_buf, sizeof(enc_buf));
+		//ret = memcmp(enc_buf, dec_buf, sizeof(enc_buf));
 
-		if(ret != 0) count += 1;
+		//if(ret != 0) count += 1;
 	}
 	
-	if (count != 0) {
+	/*if (count != 0) {
 		printf("Encryption failed %d times\n", count);
 	}
 	else {
 		printf("All encryptions passed\n");
-	}
+	}*/
 	
 	return 0;
 }
