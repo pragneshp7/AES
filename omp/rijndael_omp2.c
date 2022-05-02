@@ -3,9 +3,11 @@
 #include <memory.h>
 #include <time.h>
 #include <string.h>
+#include <omp.h>
+
 #include "rijndael.h"
 
-#define PAGE_SIZE 65536 //8 - 1K
+#define PAGE_SIZE 65536 //8 - 1Kbits, 1024 - 128Kbits
 
 //icpc -Wall -xHost -O2 -qopenmp rijndael_omp.c -o out2
 
@@ -197,11 +199,15 @@ void aes_add_round_key(uint8_t *state,
 void aes_sub_bytes(uint8_t *state)
 {
     int i, j;
+	//#pragma omp parallel
+	//{
+	//#pragma omp for collapse(2)
     for (i = 0; i < 4; i++) {
         for (j = 0; j < 4; j++) {
             state[i * 4 + j] = aes_sub_sbox(state[i * 4 + j]);
         }
 	}
+	//}
 }
 
 void aes_shift_rows(uint8_t *state)
@@ -220,15 +226,10 @@ void aes_shift_rows(uint8_t *state)
     }
 }
 
-uint8_t aes_xtime(uint8_t x)
+ uint8_t aes_xtimes(uint8_t x, int ts)
 {
-    return ((x << 1) ^ (((x >> 7) & 1) * 0x1b));
-}
-
-uint8_t aes_xtimes(uint8_t x, int ts)
-{
-    while (ts-- > 0) {
-        x = aes_xtime(x);
+    for (int i = ts; i > 0; i--) {
+        x = ((x << 1) ^ (((x >> 7) & 1) * 0x1b));
     }
    
     return x;
@@ -236,10 +237,7 @@ uint8_t aes_xtimes(uint8_t x, int ts)
 
 uint8_t aes_mul(uint8_t x, uint8_t y)
 {
-    /*
-     * encrypt: y has only 2 bits: can be 1, 2 or 3
-     * decrypt: y could be any value of 9, b, d, or e
-     */
+
    
     return ((((y >> 0) & 1) * aes_xtimes(x, 0)) ^
             (((y >> 1) & 1) * aes_xtimes(x, 1)) ^
@@ -251,23 +249,35 @@ uint8_t aes_mul(uint8_t x, uint8_t y)
             (((y >> 7) & 1) * aes_xtimes(x, 7)) );
 }
 
+uint8_t aes_mul_encrypt(uint8_t x, uint8_t y)
+{
+
+   
+    uint8_t z = ((((y >> 0) & 1) * x) ^ (((y >> 1) & 1) * ((x << 1) ^ (((x >> 7) & 1) * 0x1b))) );
+    return z;
+} 
+
 void aes_mix_columns(uint8_t *state)
 {
     uint8_t y[16] = { 2, 3, 1, 1,  1, 2, 3, 1,  1, 1, 2, 3,  3, 1, 1, 2};
     uint8_t s[4];
     int i, j, r;
    
+	//#pragma omp parallel reduction(^:s)
+	//{
+	//#pragma omp for 
     for (i = 0; i < 4; i++) {
         for (r = 0; r < 4; r++) {
             s[r] = 0;
             for (j = 0; j < 4; j++) {
-                s[r] = s[r] ^ aes_mul(state[i * 4 + j], y[r * 4 + j]);
+                s[r] = s[r] ^ ((((y[r * 4 + j] >> 0) & 1) * state[i * 4 + j]) ^ (((y[r * 4 + j] >> 1) & 1) * ((state[i * 4 + j] << 1) ^ (((state[i * 4 + j] >> 7) & 1) * 0x1b))) );
             }
         }
         for (r = 0; r < 4; r++) {
             state[i * 4 + r] = s[r];
         }
     }
+	//}
 }
 
 
@@ -282,15 +292,15 @@ void aes_dump(char *msg, uint8_t *data, int len)
     printf("\n");
 }
 
-int aes_encrypt(uint8_t *data, int len, uint8_t *key)
+int aes_encrypt(uint8_t *data, int len, uint8_t *key, uint8_t *w)
 {
-    uint8_t w[4 * 4 * 15] = {0}; /* round key */
+    //uint8_t w[4 * 4 * 15] = {0}; /* round key */
     uint8_t s[4 * 4] = {0}; /* state */
    
     int nr, i, j;
 
     /* key expansion */
-    aes_key_expansion(key, w);
+    //aes_key_expansion(key, w);
    
     /* start data cypher loop over input buffer */
     for (i = 0; i < len; i += 4 * 4) {
@@ -331,8 +341,8 @@ int aes_encrypt(uint8_t *data, int len, uint8_t *key)
         /* save state (cypher) to user buffer */
         for (j = 0; j < 4 * 4; j++)
             data[i + j] = s[j];
-        //printf("Output:\n");
-        //aes_dump("cypher", &data[i], 4 * 4);
+       // printf("Output:\n");
+       // aes_dump("cypher", &data[i], 4 * 4);
     }
    
     return 0;
@@ -452,7 +462,7 @@ int aes_decrypt(uint8_t *data, int len, uint8_t *key)
     return 0;
 }
 
-void aes_cypher_256_test()
+/*void aes_cypher_256_test()
 {
     uint8_t buf[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
                       0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
@@ -471,13 +481,23 @@ void aes_cypher_256_test()
    // aes_dump("data", buf, sizeof(buf));
    // aes_dump("key ",  key, sizeof(key));
    // aes_decrypt(buf, sizeof(buf), key);
-}
+}*/
 
 int main()
 {
+	
+	//int nt = 1;
+
+	/*#ifdef _OPENMP
+	#pragma omp parallel private(nt)
+	{ nt = omp_get_num_threads(); if(nt<1) printf("NO print, OMP warmup.\n"); }
+	#endif
+	
+	omp_set_num_threads(nt);
+	*/
 	uint8_t buf[16], enc_buf[16], dec_buf[16];
-	//int count = 0;
-	//int ret;
+	int count = 0;
+	int ret;
 	unsigned seed = (unsigned) clock();
 	uint8_t key[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
                       0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -486,41 +506,56 @@ int main()
 	
 	//aes_cypher_256_test();
 
-	for (int k = 0; k < PAGE_SIZE;	k++){
-		for (int i = 0; i<16; i++){
+	uint8_t w[4 * 4 * 15] = {0}; /* round key */
+	aes_key_expansion(key, w);
+	
+	//base test - output should be cypher:  8e a2 b7 ca 51 67 45 bf ea fc 49 90 4b 49 60 89
+	uint8_t buf2[16] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+              0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
+	printf("\nAES_CYPHER_256 encrypt test case:\n");
+    printf("Input:\n");
+    aes_dump("data", buf2, sizeof(buf2));
+    aes_dump("key ",  key, sizeof(key));
+    aes_encrypt(buf2, sizeof(buf2), key, w);
+	
+	int k, i;
+	
+	//#pragma omp parallel for default(none) private(i,k,buf,enc_buf,dec_buf,ret) shared(seed,key,count,w) schedule(static) reduction (+:count)
+	for (k = 0; k < PAGE_SIZE;	k++){
+		for (i = 0; i<16; i++){
 			buf[i] = rand_r(&seed)/256;
 		}
 	
-		//memcpy(enc_buf,buf,sizeof(buf));
+		memcpy(enc_buf,buf,sizeof(buf));
 		//aes_dump("enc_buf", enc_buf, sizeof(enc_buf));
 
 		//printf("\nAES_CYPHER_256 encrypt test case:\n");
 		//printf("Input:\n");
 		//aes_dump("data", buf, sizeof(buf));
 		//aes_dump("key ",  key, sizeof(key));
-		aes_encrypt(buf, sizeof(buf), key);
+		aes_encrypt(buf, sizeof(buf), key, w);
    
 	
 		//printf("\nAES_CYPHER_256 decrypt test case:\n");
 		//printf("Input:\n");
 		//aes_dump("data", buf, sizeof(buf));
 		//aes_dump("key ",  key, sizeof(key));
-		//aes_decrypt(buf, sizeof(buf), key);
+		aes_decrypt(buf, sizeof(buf), key);
 		//aes_dump("dec_buf", buf, sizeof(buf));
 
-		//memcpy(dec_buf,buf,sizeof(buf));
+		memcpy(dec_buf,buf,sizeof(buf));
 	
-		//ret = memcmp(enc_buf, dec_buf, sizeof(enc_buf));
+		ret = memcmp(enc_buf, dec_buf, sizeof(enc_buf));
 
-		//if(ret != 0) count += 1;
+		if(ret != 0) count += 1;
 	}
 	
-	/*if (count != 0) {
+	if (count != 0) {
 		printf("Encryption failed %d times\n", count);
 	}
 	else {
 		printf("All encryptions passed\n");
-	}*/
+	}
 	
 	return 0;
 }
