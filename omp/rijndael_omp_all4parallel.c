@@ -4,12 +4,31 @@
 #include <time.h>
 #include <string.h>
 #include <omp.h>
+#include <sys/time.h>
+double gtod_secbase = 0.0E0;
 
 #include "rijndael.h"
 
 #define PAGE_SIZE 65536 //8 - 1Kbits, 1024 - 128Kbits
 
 //icpc -Wall -xHost -O2 -qopenmp rijndael_omp.c -o out2
+
+double gtod_timer()
+{
+   struct timeval tv;
+   struct timezone *Tzp=0;
+   double sec;
+
+   gettimeofday(&tv, Tzp);
+
+               /*Always remove the LARGE sec value
+                 for improved accuracy  */
+   if(gtod_secbase == 0.0E0)
+      gtod_secbase = (double)tv.tv_sec;
+   sec = (double)tv.tv_sec - gtod_secbase;
+
+   return sec + 1.0E-06*(double)tv.tv_usec;
+}
 
 //
 // Public Definitions
@@ -487,15 +506,16 @@ int aes_decrypt(uint8_t *data, int len, uint8_t *key)
 int main()
 {
 	
-	//int nt = 1;
+	int nt = 8;
 
-	/*#ifdef _OPENMP
+	#ifdef _OPENMP
 	#pragma omp parallel private(nt)
 	{ nt = omp_get_num_threads(); if(nt<1) printf("NO print, OMP warmup.\n"); }
 	#endif
 	
 	omp_set_num_threads(nt);
-	*/
+    double time, t0, t1;
+
 	uint8_t buf[16], enc_buf[16], dec_buf[16];
 	int count = 0;
 	int ret;
@@ -522,6 +542,8 @@ int main()
 	int k, i;
 	
 	//#pragma omp parallel for default(none) private(i,k,buf,enc_buf,dec_buf,ret) shared(seed,key,count,w) schedule(static) reduction (+:count)
+    t0 = gtod_timer();
+
 	for (k = 0; k < PAGE_SIZE;	k++){
 		for (i = 0; i<16; i++){
 			buf[i] = rand_r(&seed)/256;
@@ -557,7 +579,11 @@ int main()
 	else {
 		printf("All encryptions passed\n");
 	}
-	
+
+   t1 = gtod_timer();
+   time  = t1 - t0;
+   printf("%lf\n",time);
+
 	return 0;
 }
 
