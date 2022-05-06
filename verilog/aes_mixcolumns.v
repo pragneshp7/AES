@@ -190,7 +190,7 @@ y[15] = 2'd2;
 end
 
 always @(posedge clk) begin
-if (!reset || start) begin
+if (!reset || start_done) begin
 	s[0] <= 8'b0;
 	s[1] <= 8'b0;
 	s[2] <= 8'b0;
@@ -208,7 +208,7 @@ if (!reset || start) begin
 	s[14] <= 8'b0;
 	s[15] <= 8'b0;	
 end
-else begin
+else if (!done) begin
 	s[s_num] <= state_out; 
 end
 end

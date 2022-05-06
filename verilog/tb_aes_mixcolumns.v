@@ -1,6 +1,5 @@
 `timescale 1ns/1ns
-module tb_aes_mixcolumns(
-);
+module tb_aes_mixcolumns();
 
 reg tb_clk;
 reg tb_reset;
@@ -33,6 +32,18 @@ initial begin
   tb_state3 = 32'hffeeddcc;
   #10
   tb_start_in = 1'b1;
+  //@(posedge done);
+  #1000
+  tb_state0 = 32'h78563412;
+  tb_state1 = 32'h44332211;
+  tb_state2 = 32'h16151413;
+  tb_state3 = 32'hdecdbcab;
+  #30
+  tb_start_in = 0;
+  #20
+  tb_start_in = 1;
+  //@(posedge done);
+  #800;
 end
 
 initial begin
