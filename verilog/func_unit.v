@@ -5,8 +5,9 @@ input [1:0] y,
 output [7:0] state_out
 );
 
-
-assign s_out = s ^ (((y & 1) * state) ^ (((y >> 1) & 1) * ((state << 1) ^ (((state >> 7) & 1) * 0x1b))) );
+wire [7:0] s_out;
+assign state_out = s_out;  
+assign s_out = s^(((y&1)*state)^(((y>>1)&1)*((state<<1)^(((state>>7)&1)*8'h1b))));
 endmodule
 
 module control (
@@ -91,6 +92,7 @@ module singlePulse(CLK, D, SP);
      input CLK, D;
      output SP;
      reg Q;
+  	 wire Qn;
      assign Qn = ~Q;
      assign SP = D & Qn;
 
@@ -120,11 +122,12 @@ reg [7:0] input_state [15:0];
 wire [7:0] sin;
 wire [7:0] state_in;
 wire [7:0] state_out;
-wire [1:0] yin;
+wire [1:0] y_in;
 reg [3:0] s_num, input_state_num, y_num;
-wire start_done, start, done_signal; 
+wire start, done_signal; 
+reg start_done;
 
-always(posedge clk) begin
+always @(posedge clk) begin
 if (!reset) begin
 	input_state[0] <= 8'b0;
 	input_state[1] <= 8'b0;
@@ -182,7 +185,7 @@ y[14] = 2'd1;
 y[15] = 2'd2;
 end
 
-always(posedge clk) begin
+always @(posedge clk) begin
 if (!reset || start) begin
 	s[0] <= 8'b0;
 	s[1] <= 8'b0;
@@ -231,9 +234,10 @@ end
 
 control dut_control(clk, reset, start_done, s_num, y_num, input_state_num, done_signal);
 func_unit dut_func_unit(sin, state_in, y_in, state_out);
-singlePulse (clk, start_in, start);
+singlePulse dut_singlePulse (clk, start_in, start);
 
 endmodule
+
 
 module tb_aes_mixcolumns(
 );
@@ -251,16 +255,16 @@ wire [31:0] tb_state_out2;
 wire [31:0] tb_state_out3; 
 wire tb_done;
 
-aes_mixcolumns dut_aes_mixcolumns (tb_clk, tb_reset, tb_start_in, tb_state0, tb_state1, tb_state2, tb_state3, tb_state_out0, tb_state_out1, tb_state_out2, tb_state_out3);
+aes_mixcolumns dut_aes_mixcolumns (tb_clk, tb_reset, tb_start_in, tb_state0, tb_state1, tb_state2, tb_state3, tb_state_out0, tb_state_out1, tb_state_out2, tb_state_out3, tb_done);
 
 initial #1000 $finish;
 
 initial begin
   // Initialize Inputs
-  clk = 0;
-  reset = 0;
+  tb_clk = 0;
+  tb_reset = 0;
   #18;
-  reset = 1;
+  tb_reset = 1;
   #10
   tb_state0 = 32'h33221100;
   tb_state1 = 32'h77665544;
@@ -270,7 +274,7 @@ initial begin
 end
 
 initial begin
-	forever #5 clk = ~clk;
+	forever #5 tb_clk = ~tb_clk;
 end
 
 initial begin  
