@@ -6,13 +6,103 @@ output [7:0] state_out
 );
 
 
-assign s_out = s ^ (((y & 1) * state) ^ (((y >> 1) & 1) * ((state << 1) ^ (((state >> 7) & 1) * 0x1b))) )
+assign s_out = s ^ (((y & 1) * state) ^ (((y >> 1) & 1) * ((state << 1) ^ (((state >> 7) & 1) * 0x1b))) );
 endmodule
 
-module top_aes_mixcolumns (
+module control (
 input clk,
 input reset,
-input start,
+input start_done,
+output [3:0] s_num,
+output [3:0] y_num,
+output [3:0] input_state_num,
+output done_signal
+);
+
+reg [3:0] counter_16;
+reg [3:0] counter_s_num;
+reg [1:0] counter_4; 
+reg [1:0] counter_16_4;
+reg [5:0] counter_64;
+wire done;
+
+assign y_num = counter_16;
+assign s_num = counter_s_num;
+assign input_state_num = (counter_16_4*4)+counter_4; //TO-DO
+assign done = (counter_64 == 63) ? 1 : 0;
+assign done_signal = done;
+
+always @(posedge clk) begin //counter_16
+if (!reset || start_done) begin 
+	counter_16 <= 0;
+	counter_16_4 <= 0;
+end
+else if (!done) begin 
+	if (counter_16 == 15) begin
+		counter_16 <= 0;
+		counter_16_4 <= counter_16_4 + 1;
+	end
+	else begin
+		counter_16 <= counter_16 + 1;
+	end
+end
+end
+
+always @(posedge clk) begin //counter_s_num
+if (!reset || start_done) begin 
+	counter_s_num <= 0;
+end
+else if (!done) begin 
+	if ((counter_s_num == 3) || (counter_s_num == 7) || (counter_s_num == 11) || (counter_s_num == 15)) begin
+		counter_s_num <= counter_s_num + 1;
+	end
+end
+end
+
+always @(posedge clk) begin //counter_4
+if (!reset || start_done) begin 
+	counter_4 <= 0;
+end
+else if (!done) begin 
+	if (counter_16 == 3) begin
+		counter_4 <= 0;
+	end
+	else begin
+		counter_4 <= counter_4 + 1;
+	end
+end
+end
+
+always @(posedge clk) begin //counter_4
+if (!reset || start_done) begin 
+	counter_64 <= 0;
+end
+else if (counter_64 == 63) begin
+	counter_64 <= counter_64;
+end
+else begin
+	counter_64 <= counter_64 + 1;
+end
+end
+
+endmodule
+
+module singlePulse(CLK, D, SP);
+     input CLK, D;
+     output SP;
+     reg Q;
+     assign Qn = ~Q;
+     assign SP = D & Qn;
+
+     always @(posedge CLK) begin
+         Q <= D;
+     end
+endmodule
+
+module aes_mixcolumns (
+input clk,
+input reset,
+input start_in,
 input [31:0] state0,
 input [31:0] state1,
 input [31:0] state2,
@@ -31,9 +121,11 @@ wire [7:0] sin;
 wire [7:0] state_in;
 wire [7:0] state_out;
 wire [1:0] yin;
+reg [3:0] s_num, input_state_num, y_num;
+wire start_done, start, done_signal; 
 
 always(posedge clk) begin
-if (reset) begin
+if (!reset) begin
 	input_state[0] <= 8'b0;
 	input_state[1] <= 8'b0;
 	input_state[2] <= 8'b0;
@@ -91,7 +183,7 @@ y[15] = 2'd2;
 end
 
 always(posedge clk) begin
-if (reset || start) begin
+if (!reset || start) begin
 	s[0] <= 8'b0;
 	s[1] <= 8'b0;
 	s[2] <= 8'b0;
@@ -110,7 +202,7 @@ if (reset || start) begin
 	s[15] <= 8'b0;	
 end
 else begin
-	s[xyz] <= state_out; //TO-DO same as assign sin
+	s[s_num] <= state_out; 
 end
 end
 
@@ -120,14 +212,70 @@ assign state_out1 = {s[7],s[6],s[5],s[4]};
 assign state_out2 = {s[11],s[10],s[9],s[8]};
 assign state_out3 = {s[15],s[14],s[13],s[12]};
 
-assign state_in = input_state[xyz]; //TO-DO
-assign y_in = y[xyz]; //TO-DO
-assign sin = s[xyz]; //TO-DO
+assign state_in = input_state[input_state_num]; 
+assign y_in = y[y_num]; 
+assign sin = s[s_num]; 
+assign done = done_signal;
 
+always @(posedge clk) begin //start_done - should become 1 after one cycle of getting start signal
+if (!reset) begin
+	start_done <= 1'b0;
+end
+else if (start) begin
+	start_done <= 1'b1;
+end
+else begin
+	start_done <= 1'b0;
+end
+end
 
-
-control dut_control();
+control dut_control(clk, reset, start_done, s_num, y_num, input_state_num, done_signal);
 func_unit dut_func_unit(sin, state_in, y_in, state_out);
+singlePulse (clk, start_in, start);
 
+endmodule
+
+module tb_aes_mixcolumns(
+);
+
+reg tb_clk;
+reg tb_reset;
+reg tb_start_in;
+reg [31:0] tb_state0;
+reg [31:0] tb_state1;
+reg [31:0] tb_state2;
+reg [31:0] tb_state3;
+wire [31:0] tb_state_out0;
+wire [31:0] tb_state_out1;
+wire [31:0] tb_state_out2;
+wire [31:0] tb_state_out3; 
+wire tb_done;
+
+aes_mixcolumns dut_aes_mixcolumns (tb_clk, tb_reset, tb_start_in, tb_state0, tb_state1, tb_state2, tb_state3, tb_state_out0, tb_state_out1, tb_state_out2, tb_state_out3);
+
+initial #1000 $finish;
+
+initial begin
+  // Initialize Inputs
+  clk = 0;
+  reset = 0;
+  #18;
+  reset = 1;
+  #10
+  tb_state0 = 32'h33221100;
+  tb_state1 = 32'h77665544;
+  tb_state2 = 32'hbbaa9988;
+  tb_state3 = 32'hffeeddcc;
+  
+end
+
+initial begin
+	forever #5 clk = ~clk;
+end
+
+initial begin  
+	$dumpfile("dump.vcd");
+	$dumpvars;
+end
 
 endmodule
