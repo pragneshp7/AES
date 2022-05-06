@@ -1,3 +1,4 @@
+`timescale 1ns/1ns
 module tb_aes_mixcolumns(
 );
 
@@ -16,12 +17,13 @@ wire tb_done;
 
 aes_mixcolumns dut_aes_mixcolumns (tb_clk, tb_reset, tb_start_in, tb_state0, tb_state1, tb_state2, tb_state3, tb_state_out0, tb_state_out1, tb_state_out2, tb_state_out3, tb_done);
 
-initial #1000 $finish;
+//initial #1000 $finish;
 
 initial begin
   // Initialize Inputs
   tb_clk = 0;
   tb_reset = 0;
+  tb_start_in = 0;
   #18;
   tb_reset = 1;
   #10
@@ -37,9 +39,9 @@ initial begin
 	forever #5 tb_clk = ~tb_clk;
 end
 
-initial begin  
+/* initial begin  
 	$dumpfile("dump.vcd");
 	$dumpvars;
-end
+end */
 
 endmodule

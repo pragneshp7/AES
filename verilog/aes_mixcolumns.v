@@ -24,13 +24,13 @@ reg [3:0] counter_16;
 reg [3:0] counter_s_num;
 reg [1:0] counter_4; 
 reg [1:0] counter_16_4;
-reg [5:0] counter_64;
+reg [6:0] counter_64;
 wire done;
 
 assign y_num = counter_16;
 assign s_num = counter_s_num;
 assign input_state_num = (counter_16_4*4)+counter_4; //TO-DO
-assign done = (counter_64 == 63) ? 1 : 0;
+assign done = (counter_64 == 64) ? 1 : 0;
 assign done_signal = done;
 
 always @(posedge clk) begin //counter_16
@@ -54,7 +54,7 @@ if (!reset || start_done) begin
 	counter_s_num <= 0;
 end
 else if (!done) begin 
-	if ((counter_s_num == 3) || (counter_s_num == 7) || (counter_s_num == 11) || (counter_s_num == 15)) begin
+	if ((counter_16 == 3) || (counter_16 == 7) || (counter_16 == 11) || (counter_16 == 15)) begin
 		counter_s_num <= counter_s_num + 1;
 	end
 end
@@ -78,7 +78,7 @@ always @(posedge clk) begin //counter_4
 if (!reset || start_done) begin 
 	counter_64 <= 0;
 end
-else if (counter_64 == 63) begin
+else if (counter_64 == 64) begin
 	counter_64 <= counter_64;
 end
 else begin
@@ -91,13 +91,17 @@ endmodule
 module singlePulse(CLK, D, SP);
      input CLK, D;
      output SP;
-     reg Q;
-  	 wire Qn;
-     assign Qn = ~Q;
-     assign SP = D & Qn;
+     reg Q1, Q2;
+  	 wire Qn1, Qn2;
+     assign Qn1 = ~Q1;
+	 assign Qn2 = ~Q2;
+     assign SP = Q1 & Qn2;
 
      always @(posedge CLK) begin
-         Q <= D;
+         Q1 <= D;
+     end
+	 always @(posedge CLK) begin
+         Q2 <= D & Q1 ;
      end
 endmodule
 
