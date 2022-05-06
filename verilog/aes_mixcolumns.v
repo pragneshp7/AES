@@ -238,7 +238,7 @@ end
 
 control dut_control(clk, reset, start_done, s_num, y_num, input_state_num, done_signal);
 func_unit dut_func_unit(sin, state_in, y_in, state_out);
-singlePulse dut_singlePulse (clk, start_in, start);
+singlePulse dut_singlePulse (clk, start_in, start); //single pulser
 
 endmodule
 
