@@ -506,7 +506,7 @@ int aes_decrypt(uint8_t *data, int len, uint8_t *key)
 int main()
 {
 	
-	int nt = 1;
+	int nt = 16;
 
 	#ifdef _OPENMP
 	#pragma omp parallel private(nt)
@@ -532,13 +532,13 @@ int main()
 	aes_key_expansion(key, w);
 	
 	//base test - output should be cypher:  8e a2 b7 ca 51 67 45 bf ea fc 49 90 4b 49 60 89
-	uint8_t buf2[16] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-              0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
-	printf("\nAES_CYPHER_256 encrypt test case:\n");
-    printf("Input:\n");
-    aes_dump("data", buf2, sizeof(buf2));
-    aes_dump("key ",  key, sizeof(key));
-    aes_encrypt(buf2, sizeof(buf2), key, w);
+	//uint8_t buf2[16] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+     //         0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
+	//printf("\nAES_CYPHER_256 encrypt test case:\n");
+    //printf("Input:\n");
+    //aes_dump("data", buf2, sizeof(buf2));
+    //aes_dump("key ",  key, sizeof(key));
+    //aes_encrypt(buf2, sizeof(buf2), key, w);
 	
 	int k, i;
 	
