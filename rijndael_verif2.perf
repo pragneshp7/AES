@@ -2,21 +2,18 @@ Flat profile:
 
 Each sample counts as 0.01 seconds.
   %   cumulative   self              self     total           
- time   seconds   seconds    calls  ms/call  ms/call  name    
- 53.54     44.22    44.22 1526726656     0.00     0.00  aes_xtime(unsigned char)
- 31.14     69.94    25.72 436207616     0.00     0.00  aes_xtimes(unsigned char, int)
-  9.06     77.42     7.48 54525952     0.00     0.00  aes_mul(unsigned char, unsigned char)
-  3.97     80.70     3.28   851968     0.00     0.09  aes_mix_columns(unsigned char*)
-  0.98     81.51     0.81   917504     0.00     0.00  aes_shift_rows(unsigned char*)
-  0.70     82.09     0.58   917504     0.00     0.00  aes_sub_bytes(unsigned char*)
-  0.28     82.32     0.23 14680116     0.00     0.00  aes_sub_sbox(unsigned char)
-  0.19     82.48     0.16   983040     0.00     0.00  aes_add_round_key(unsigned char*, unsigned char*, int)
-  0.10     82.56     0.08    65536     0.00     1.26  aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*)
-  0.04     82.59     0.03                             main
-  0.00     82.59     0.00       13     0.00     0.00  aes_sub_dword(unsigned int)
-  0.00     82.59     0.00        7     0.00     0.00  aes_rot_dword(unsigned int)
-  0.00     82.59     0.00        7     0.00     0.00  aes_swap_dword(unsigned int)
-  0.00     82.59     0.00        1     0.00     0.00  aes_key_expansion(unsigned char*, unsigned char*)
+ time   seconds   seconds    calls  us/call  us/call  name    
+ 76.98      6.99     6.99   851968     8.20     8.20  aes_mix_columns(unsigned char*)
+ 10.79      7.97     0.98   917504     1.07     1.07  aes_shift_rows(unsigned char*)
+  7.16      8.62     0.65   917504     0.71     0.94  aes_sub_bytes(unsigned char*)
+  2.31      8.83     0.21 14680116     0.01     0.01  aes_sub_sbox(unsigned char)
+  1.54      8.97     0.14   983040     0.14     0.14  aes_add_round_key(unsigned char*, unsigned char*, int)
+  0.99      9.06     0.09    65536     1.37   138.24  aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*)
+  0.22      9.08     0.02                             main
+  0.00      9.08     0.00       13     0.00     0.06  aes_sub_dword(unsigned int)
+  0.00      9.08     0.00        7     0.00     0.00  aes_rot_dword(unsigned int)
+  0.00      9.08     0.00        7     0.00     0.00  aes_swap_dword(unsigned int)
+  0.00      9.08     0.00        1     0.00     0.74  aes_key_expansion(unsigned char*, unsigned char*)
 
  %         the percentage of the total running time of the
 time       program used by this function.
@@ -54,65 +51,53 @@ notice and this notice are preserved.
 		     Call graph (explanation follows)
 
 
-granularity: each sample hit covers 4 byte(s) for 0.01% of 82.59 seconds
+granularity: each sample hit covers 4 byte(s) for 0.11% of 9.08 seconds
 
 index % time    self  children    called     name
                                                  <spontaneous>
-[1]    100.0    0.03   82.56                 main [1]
-                0.08   82.48   65536/65536       aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*) [2]
-                0.00    0.00       1/1           aes_key_expansion(unsigned char*, unsigned char*) [12]
+[1]    100.0    0.02    9.06                 main [1]
+                0.09    8.97   65536/65536       aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*) [2]
+                0.00    0.00       1/1           aes_key_expansion(unsigned char*, unsigned char*) [9]
 -----------------------------------------------
-                0.08   82.48   65536/65536       main [1]
-[2]    100.0    0.08   82.48   65536         aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*) [2]
-                3.28   77.42  851968/851968      aes_mix_columns(unsigned char*) [3]
-                0.81    0.00  917504/917504      aes_shift_rows(unsigned char*) [7]
-                0.58    0.23  917504/917504      aes_sub_bytes(unsigned char*) [8]
-                0.16    0.00  983040/983040      aes_add_round_key(unsigned char*, unsigned char*, int) [10]
+                0.09    8.97   65536/65536       main [1]
+[2]     99.8    0.09    8.97   65536         aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*) [2]
+                6.99    0.00  851968/851968      aes_mix_columns(unsigned char*) [3]
+                0.98    0.00  917504/917504      aes_shift_rows(unsigned char*) [4]
+                0.65    0.21  917504/917504      aes_sub_bytes(unsigned char*) [5]
+                0.14    0.00  983040/983040      aes_add_round_key(unsigned char*, unsigned char*, int) [7]
 -----------------------------------------------
-                3.28   77.42  851968/851968      aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*) [2]
-[3]     97.7    3.28   77.42  851968         aes_mix_columns(unsigned char*) [3]
-                7.48   69.94 54525952/54525952     aes_mul(unsigned char, unsigned char) [4]
+                6.99    0.00  851968/851968      aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*) [2]
+[3]     77.0    6.99    0.00  851968         aes_mix_columns(unsigned char*) [3]
 -----------------------------------------------
-                7.48   69.94 54525952/54525952     aes_mix_columns(unsigned char*) [3]
-[4]     93.7    7.48   69.94 54525952         aes_mul(unsigned char, unsigned char) [4]
-               25.72   44.22 436207616/436207616     aes_xtimes(unsigned char, int) [5]
+                0.98    0.00  917504/917504      aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*) [2]
+[4]     10.8    0.98    0.00  917504         aes_shift_rows(unsigned char*) [4]
 -----------------------------------------------
-               25.72   44.22 436207616/436207616     aes_mul(unsigned char, unsigned char) [4]
-[5]     84.7   25.72   44.22 436207616         aes_xtimes(unsigned char, int) [5]
-               44.22    0.00 1526726656/1526726656     aes_xtime(unsigned char) [6]
+                0.65    0.21  917504/917504      aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*) [2]
+[5]      9.5    0.65    0.21  917504         aes_sub_bytes(unsigned char*) [5]
+                0.21    0.00 14680064/14680116     aes_sub_sbox(unsigned char) [6]
 -----------------------------------------------
-               44.22    0.00 1526726656/1526726656     aes_xtimes(unsigned char, int) [5]
-[6]     53.5   44.22    0.00 1526726656         aes_xtime(unsigned char) [6]
+                0.00    0.00      52/14680116     aes_sub_dword(unsigned int) [8]
+                0.21    0.00 14680064/14680116     aes_sub_bytes(unsigned char*) [5]
+[6]      2.3    0.21    0.00 14680116         aes_sub_sbox(unsigned char) [6]
 -----------------------------------------------
-                0.81    0.00  917504/917504      aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*) [2]
-[7]      1.0    0.81    0.00  917504         aes_shift_rows(unsigned char*) [7]
+                0.14    0.00  983040/983040      aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*) [2]
+[7]      1.5    0.14    0.00  983040         aes_add_round_key(unsigned char*, unsigned char*, int) [7]
 -----------------------------------------------
-                0.58    0.23  917504/917504      aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*) [2]
-[8]      1.0    0.58    0.23  917504         aes_sub_bytes(unsigned char*) [8]
-                0.23    0.00 14680064/14680116     aes_sub_sbox(unsigned char) [9]
------------------------------------------------
-                0.00    0.00      52/14680116     aes_sub_dword(unsigned int) [11]
-                0.23    0.00 14680064/14680116     aes_sub_bytes(unsigned char*) [8]
-[9]      0.3    0.23    0.00 14680116         aes_sub_sbox(unsigned char) [9]
------------------------------------------------
-                0.16    0.00  983040/983040      aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*) [2]
-[10]     0.2    0.16    0.00  983040         aes_add_round_key(unsigned char*, unsigned char*, int) [10]
------------------------------------------------
-                0.00    0.00      13/13          aes_key_expansion(unsigned char*, unsigned char*) [12]
-[11]     0.0    0.00    0.00      13         aes_sub_dword(unsigned int) [11]
-                0.00    0.00      52/14680116     aes_sub_sbox(unsigned char) [9]
+                0.00    0.00      13/13          aes_key_expansion(unsigned char*, unsigned char*) [9]
+[8]      0.0    0.00    0.00      13         aes_sub_dword(unsigned int) [8]
+                0.00    0.00      52/14680116     aes_sub_sbox(unsigned char) [6]
 -----------------------------------------------
                 0.00    0.00       1/1           main [1]
-[12]     0.0    0.00    0.00       1         aes_key_expansion(unsigned char*, unsigned char*) [12]
-                0.00    0.00      13/13          aes_sub_dword(unsigned int) [11]
-                0.00    0.00       7/7           aes_rot_dword(unsigned int) [20]
-                0.00    0.00       7/7           aes_swap_dword(unsigned int) [21]
+[9]      0.0    0.00    0.00       1         aes_key_expansion(unsigned char*, unsigned char*) [9]
+                0.00    0.00      13/13          aes_sub_dword(unsigned int) [8]
+                0.00    0.00       7/7           aes_rot_dword(unsigned int) [17]
+                0.00    0.00       7/7           aes_swap_dword(unsigned int) [18]
 -----------------------------------------------
-                0.00    0.00       7/7           aes_key_expansion(unsigned char*, unsigned char*) [12]
-[20]     0.0    0.00    0.00       7         aes_rot_dword(unsigned int) [20]
+                0.00    0.00       7/7           aes_key_expansion(unsigned char*, unsigned char*) [9]
+[17]     0.0    0.00    0.00       7         aes_rot_dword(unsigned int) [17]
 -----------------------------------------------
-                0.00    0.00       7/7           aes_key_expansion(unsigned char*, unsigned char*) [12]
-[21]     0.0    0.00    0.00       7         aes_swap_dword(unsigned int) [21]
+                0.00    0.00       7/7           aes_key_expansion(unsigned char*, unsigned char*) [9]
+[18]     0.0    0.00    0.00       7         aes_swap_dword(unsigned int) [18]
 -----------------------------------------------
 
  This table describes the call tree of the program, and was sorted by
@@ -205,8 +190,7 @@ notice and this notice are preserved.
 
 Index by function name
 
-   [5] aes_xtimes(unsigned char, int) [11] aes_sub_dword(unsigned int) [12] aes_key_expansion(unsigned char*, unsigned char*)
-   [2] aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*) [7] aes_shift_rows(unsigned char*) [4] aes_mul(unsigned char, unsigned char)
-   [9] aes_sub_sbox(unsigned char) [21] aes_swap_dword(unsigned int) [6] aes_xtime(unsigned char)
-  [20] aes_rot_dword(unsigned int) [3] aes_mix_columns(unsigned char*) [1] main
-   [8] aes_sub_bytes(unsigned char*) [10] aes_add_round_key(unsigned char*, unsigned char*, int)
+   [2] aes_encrypt(unsigned char*, int, unsigned char*, unsigned char*) [8] aes_sub_dword(unsigned int) [7] aes_add_round_key(unsigned char*, unsigned char*, int)
+   [6] aes_sub_sbox(unsigned char) [4] aes_shift_rows(unsigned char*) [9] aes_key_expansion(unsigned char*, unsigned char*)
+  [17] aes_rot_dword(unsigned int) [18] aes_swap_dword(unsigned int) [1] main
+   [5] aes_sub_bytes(unsigned char*) [3] aes_mix_columns(unsigned char*)
