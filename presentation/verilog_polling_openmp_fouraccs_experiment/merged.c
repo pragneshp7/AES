@@ -24,6 +24,9 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <omp.h>
+#include <sys/time.h>
+double gtod_secbase = 0.0E0;
 
 #include "rijndael.h"
 
@@ -44,33 +47,34 @@
 
 #define PAGE_SIZE 65536 //8 - 1Kbits, 1024 - 128Kbits
 
-/* Code for interrupt handling */
-/* Device path name for the Interrupt device */
-#define GPIO_DEV_PATH    "/dev/gpio_int"
+//icpc -Wall -xHost -O2 -qopenmp rijndael_omp.c -o out2
 
-/* File descriptor for Interrupt device */
-int gpio_dev_fd  = -1;
+double gtod_timer()
+{
+   struct timeval tv;
+   struct timezone *Tzp=0;
+   double sec;
 
-/* -------------------------------------------------------------------------------
- *      Counter of number of times sigio_signal_handler() has been executed
- */
- 
-volatile int sigio_signal_count = 0;
+   gettimeofday(&tv, Tzp);
 
-/* -------------------------------------------------------------------------------
- *      Flag to indicate that a SIGIO signal has been processed
- */
-static volatile sig_atomic_t sigio_signal_processed = 0;
- 
-/* -------------------------------------------------------------------------------
- *      Time stamp set in the last sigio_signal_handler() invocation:
- */
-struct timeval sigio_signal_timestamp;
-sigset_t signal_mask, signal_mask_old, signal_mask_most;
+               /*Always remove the LARGE sec value
+                 for improved accuracy  */
+   if(gtod_secbase == 0.0E0)
+      gtod_secbase = (double)tv.tv_sec;
+   sec = (double)tv.tv_sec - gtod_secbase;
 
-void sigio_signal_handler(int signo);
+   return sec + 1.0E-06*(double)tv.tv_usec;
+}
+
+//
+// Public Definitions
+//
 
 /* moved to rijndael.h */
+
+//
+// Internal Definitions
+//
 
 /*
  * Encryption Rounds
@@ -98,6 +102,8 @@ int g_aes_nb[] = {
     /* AES_CYPHER_192 */  4,
     /* AES_CYPHER_256 */  4,
 };
+
+
 
 /*
  * aes Rcon:
@@ -310,28 +316,60 @@ uint8_t aes_mul_encrypt(uint8_t x, uint8_t y)
 
 void aes_mix_columns(uint8_t *state)
 {
+    uint8_t y[16] = { 2, 3, 1, 1,  1, 2, 3, 1,  1, 1, 2, 3,  3, 1, 1, 2};
+    uint8_t s[4];
+    int i, j, r;
+   
+    for (i = 0; i < 4; i++) {
+        for (r = 0; r < 4; r++) {
+            s[r] = 0;
+            for (j = 0; j < 4; j++) {
+                s[r] = s[r] ^ ((((y[r * 4 + j] >> 0) & 1) * state[i * 4 + j]) ^ (((y[r * 4 + j] >> 1) & 1) * ((state[i * 4 + j] << 1) ^ (((state[i * 4 + j] >> 7) & 1) * 0x1b))) );
+            }
+        }
+        for (r = 0; r < 4; r++) {
+            state[i * 4 + r] = s[r];
+        }
+    }
+}
+
+void aes_mix_columns_accel1(uint8_t *state)
+{
+ /*   uint8_t y[16] = { 2, 3, 1, 1,  1, 2, 3, 1,  1, 1, 2, 3,  3, 1, 1, 2};
+    uint8_t s[4];
+    int i, j, r;
+   
+    for (i = 0; i < 4; i++) {
+        for (r = 0; r < 4; r++) {
+            s[r] = 0;
+            for (j = 0; j < 4; j++) {
+                s[r] = s[r] ^ ((((y[r * 4 + j] >> 0) & 1) * state[i * 4 + j]) ^ (((y[r * 4 + j] >> 1) & 1) * ((state[i * 4 + j] << 1) ^ (((state[i * 4 + j] >> 7) & 1) * 0x1b))) );
+            }
+        }
+        for (r = 0; r < 4; r++) {
+            state[i * 4 + r] = s[r];
+        }
+    }
+*/
 	unsigned int valua;
-	//Making start bit of accelerator to zero
-	//Making it 1 will start the trigger to do the mix columns
 	pm_call(0XA0000000,0x20,0x0, 0, acc_virtual_address);
 	valua = (state[3]<<24)|(state[2]<<16)|(state[1]<<8)|(state[0]);
-	pm_call(0xA0000000,0x00,valua,0, acc_virtual_address);
+	pm_call(0xA0000000,0x0,valua,0, acc_virtual_address);
 	valua = (state[7]<<24)|(state[6]<<16)|(state[5]<<8)|(state[4]);
-	pm_call(0xA0000000,0x04,valua,0, acc_virtual_address);
+	pm_call(0xA0000000,0x4,valua,0, acc_virtual_address);
 	valua = (state[11]<<24)|(state[10]<<16)|(state[9]<<8)|(state[8]);
-	pm_call(0xA0000000,0x08,valua,0, acc_virtual_address);
+	pm_call(0xA0000000,0x8,valua,0, acc_virtual_address);
 	valua = (state[15]<<24)|(state[14]<<16)|(state[13]<<8)|(state[12]);
-	pm_call(0xA0000000,0x0C,valua,0, acc_virtual_address);
-	//Above 4 pm calls send 4 32-bit values
-	pm_call(0XA0000000,0x20,0x1, 0, acc_virtual_address);	//Start the conversion
+	pm_call(0xA0000000,0xC,valua,0, acc_virtual_address);
+	pm_call(0XA0000000,0x20,0x1, 0, acc_virtual_address);
 	int value = 0;
-	
-	(void)sigprocmask(SIG_SETMASK, &signal_mask_old, NULL);
-	while(sigio_signal_processed!=1){	//Waiting for the interrupt to be processed
-	//	printf("Value of sigio signal processing is %d\n",sigio_signal_processed);
+	while(value!=1) {
+    value = dm_call_ret(0XA0000000,0x1,0, acc_virtual_address);
+	//printf("Value returned is %x\n",value);
+	value = (value << 1) && 1;
 	}
 	
-	//Mix Column Values being read back
+	//Mix Column Values
 	value = dm_call_ret(0XA0000000,0x10,0x1, acc_virtual_address);
 	//printf("Value returned is %x\n",value);
 	state[3] = value>>24 & 0xFF;
@@ -356,10 +394,197 @@ void aes_mix_columns(uint8_t *state)
 	state[14] = value>>16 & 0xFF;
 	state[13] = value>>8 & 0xFF;
 	state[12] = value    & 0xFF;
-	
-	//End of this function
 }
 
+void aes_mix_columns_accel2(uint8_t *state)
+{
+ /*   uint8_t y[16] = { 2, 3, 1, 1,  1, 2, 3, 1,  1, 1, 2, 3,  3, 1, 1, 2};
+    uint8_t s[4];
+    int i, j, r;
+   
+    for (i = 0; i < 4; i++) {
+        for (r = 0; r < 4; r++) {
+            s[r] = 0;
+            for (j = 0; j < 4; j++) {
+                s[r] = s[r] ^ ((((y[r * 4 + j] >> 0) & 1) * state[i * 4 + j]) ^ (((y[r * 4 + j] >> 1) & 1) * ((state[i * 4 + j] << 1) ^ (((state[i * 4 + j] >> 7) & 1) * 0x1b))) );
+            }
+        }
+        for (r = 0; r < 4; r++) {
+            state[i * 4 + r] = s[r];
+        }
+    }
+*/
+	unsigned int valua;
+	pm_call(0XA0002000,0x20,0x0, 0, acc_virtual_address2);
+	valua = (state[3]<<24)|(state[2]<<16)|(state[1]<<8)|(state[0]);
+	pm_call(0xA0002000,0x0,valua,0, acc_virtual_address2);
+	valua = (state[7]<<24)|(state[6]<<16)|(state[5]<<8)|(state[4]);
+	pm_call(0xA0002000,0x4,valua,0, acc_virtual_address2);
+	valua = (state[11]<<24)|(state[10]<<16)|(state[9]<<8)|(state[8]);
+	pm_call(0xA0002000,0x8,valua,0, acc_virtual_address2);
+	valua = (state[15]<<24)|(state[14]<<16)|(state[13]<<8)|(state[12]);
+	pm_call(0xA0002000,0xC,valua,0, acc_virtual_address2);
+	pm_call(0XA0002000,0x20,0x1, 0, acc_virtual_address2);
+	int value = 0;
+	while(value!=1) {
+    value = dm_call_ret(0XA0002000,0x1,0, acc_virtual_address2);
+	//printf("Value returned is %x\n",value);
+	value = (value << 1) && 1;
+	}
+	
+	//Mix Column Values
+	value = dm_call_ret(0XA0002000,0x10,0x1, acc_virtual_address2);
+	//printf("Value returned is %x\n",value);
+	state[3] = value>>24 & 0xFF;
+	state[2] = value>>16 & 0xFF;
+	state[1] = value>>8 & 0xFF;
+	state[0] = value    & 0xFF;
+	value = dm_call_ret(0XA0002000,0x14,0x1, acc_virtual_address2);
+	//printf("Value returned is %x\n",value);
+	state[7] = value>>24 & 0xFF;
+	state[6] = value>>16 & 0xFF;
+	state[5] = value>>8 & 0xFF;
+	state[4] = value    & 0xFF;
+	value = dm_call_ret(0XA0002000,0x18,0x1, acc_virtual_address2);
+	//printf("Value returned is %x\n",value);
+	state[11] = value>>24 & 0xFF;
+	state[10] = value>>16 & 0xFF;
+	state[9] = value>>8 & 0xFF;
+	state[8] = value    & 0xFF;
+	value = dm_call_ret(0XA0002000,0x1C,0x1, acc_virtual_address2);
+	//printf("Value returned is %x\n",value);
+	state[15] = value>>24 & 0xFF;
+	state[14] = value>>16 & 0xFF;
+	state[13] = value>>8 & 0xFF;
+	state[12] = value    & 0xFF;
+}
+
+
+void aes_mix_columns_accel3(uint8_t *state)
+{
+ /*   uint8_t y[16] = { 2, 3, 1, 1,  1, 2, 3, 1,  1, 1, 2, 3,  3, 1, 1, 2};
+    uint8_t s[4];
+    int i, j, r;
+   
+    for (i = 0; i < 4; i++) {
+        for (r = 0; r < 4; r++) {
+            s[r] = 0;
+            for (j = 0; j < 4; j++) {
+                s[r] = s[r] ^ ((((y[r * 4 + j] >> 0) & 1) * state[i * 4 + j]) ^ (((y[r * 4 + j] >> 1) & 1) * ((state[i * 4 + j] << 1) ^ (((state[i * 4 + j] >> 7) & 1) * 0x1b))) );
+            }
+        }
+        for (r = 0; r < 4; r++) {
+            state[i * 4 + r] = s[r];
+        }
+    }
+*/
+	unsigned int valua;
+	pm_call(0XB0000000,0x20,0x0, 0, acc_virtual_address3);
+	valua = (state[3]<<24)|(state[2]<<16)|(state[1]<<8)|(state[0]);
+	pm_call(0xB0000000,0x0,valua,0, acc_virtual_address3);
+	valua = (state[7]<<24)|(state[6]<<16)|(state[5]<<8)|(state[4]);
+	pm_call(0xB0000000,0x4,valua,0, acc_virtual_address3);
+	valua = (state[11]<<24)|(state[10]<<16)|(state[9]<<8)|(state[8]);
+	pm_call(0xB0000000,0x8,valua,0, acc_virtual_address3);
+	valua = (state[15]<<24)|(state[14]<<16)|(state[13]<<8)|(state[12]);
+	pm_call(0xB0000000,0xC,valua,0, acc_virtual_address3);
+	pm_call(0XB0000000,0x20,0x1, 0, acc_virtual_address3);
+	int value = 0;
+	while(value!=1) {
+    value = dm_call_ret(0XB0000000,0x1,0, acc_virtual_address3);
+	//printf("Value returned is %x\n",value);
+	value = (value << 1) && 1;
+	}
+	
+	//Mix Column Values
+	value = dm_call_ret(0XB0000000,0x10,0x1, acc_virtual_address3);
+	//printf("Value returned is %x\n",value);
+	state[3] = value>>24 & 0xFF;
+	state[2] = value>>16 & 0xFF;
+	state[1] = value>>8 & 0xFF;
+	state[0] = value    & 0xFF;
+	value = dm_call_ret(0XB0000000,0x14,0x1, acc_virtual_address3);
+	//printf("Value returned is %x\n",value);
+	state[7] = value>>24 & 0xFF;
+	state[6] = value>>16 & 0xFF;
+	state[5] = value>>8 & 0xFF;
+	state[4] = value    & 0xFF;
+	value = dm_call_ret(0XB0000000,0x18,0x1, acc_virtual_address3);
+	//printf("Value returned is %x\n",value);
+	state[11] = value>>24 & 0xFF;
+	state[10] = value>>16 & 0xFF;
+	state[9] = value>>8 & 0xFF;
+	state[8] = value    & 0xFF;
+	value = dm_call_ret(0XB0000000,0x1C,0x1, acc_virtual_address3);
+	//printf("Value returned is %x\n",value);
+	state[15] = value>>24 & 0xFF;
+	state[14] = value>>16 & 0xFF;
+	state[13] = value>>8 & 0xFF;
+	state[12] = value    & 0xFF;
+}
+
+void aes_mix_columns_accel4(uint8_t *state)
+{
+ /*   uint8_t y[16] = { 2, 3, 1, 1,  1, 2, 3, 1,  1, 1, 2, 3,  3, 1, 1, 2};
+    uint8_t s[4];
+    int i, j, r;
+   
+    for (i = 0; i < 4; i++) {
+        for (r = 0; r < 4; r++) {
+            s[r] = 0;
+            for (j = 0; j < 4; j++) {
+                s[r] = s[r] ^ ((((y[r * 4 + j] >> 0) & 1) * state[i * 4 + j]) ^ (((y[r * 4 + j] >> 1) & 1) * ((state[i * 4 + j] << 1) ^ (((state[i * 4 + j] >> 7) & 1) * 0x1b))) );
+            }
+        }
+        for (r = 0; r < 4; r++) {
+            state[i * 4 + r] = s[r];
+        }
+    }
+*/
+	unsigned int valua;
+	pm_call(0XB0002000,0x20,0x0, 0, acc_virtual_address4);
+	valua = (state[3]<<24)|(state[2]<<16)|(state[1]<<8)|(state[0]);
+	pm_call(0xB0002000,0x0,valua,0, acc_virtual_address4);
+	valua = (state[7]<<24)|(state[6]<<16)|(state[5]<<8)|(state[4]);
+	pm_call(0xB0002000,0x4,valua,0, acc_virtual_address4);
+	valua = (state[11]<<24)|(state[10]<<16)|(state[9]<<8)|(state[8]);
+	pm_call(0xB0002000,0x8,valua,0, acc_virtual_address4);
+	valua = (state[15]<<24)|(state[14]<<16)|(state[13]<<8)|(state[12]);
+	pm_call(0xB0002000,0xC,valua,0, acc_virtual_address4);
+	pm_call(0XB0002000,0x20,0x1, 0, acc_virtual_address4);
+	int value = 0;
+	while(value!=1) {
+    value = dm_call_ret(0XB0002000,0x1,0, acc_virtual_address4);
+	//printf("Value returned is %x\n",value);
+	value = (value << 1) && 1;
+	}
+	
+	//Mix Column Values
+	value = dm_call_ret(0XB0002000,0x10,0x1, acc_virtual_address4);
+	//printf("Value returned is %x\n",value);
+	state[3] = value>>24 & 0xFF;
+	state[2] = value>>16 & 0xFF;
+	state[1] = value>>8 & 0xFF;
+	state[0] = value    & 0xFF;
+	value = dm_call_ret(0XB0002000,0x14,0x1, acc_virtual_address4);
+	//printf("Value returned is %x\n",value);
+	state[7] = value>>24 & 0xFF;
+	state[6] = value>>16 & 0xFF;
+	state[5] = value>>8 & 0xFF;
+	state[4] = value    & 0xFF;
+	value = dm_call_ret(0XB0002000,0x18,0x1, acc_virtual_address4);
+	//printf("Value returned is %x\n",value);
+	state[11] = value>>24 & 0xFF;
+	state[10] = value>>16 & 0xFF;
+	state[9] = value>>8 & 0xFF;
+	state[8] = value    & 0xFF;
+	value = dm_call_ret(0XB0002000,0x1C,0x1, acc_virtual_address4);
+	//printf("Value returned is %x\n",value);
+	state[15] = value>>24 & 0xFF;
+	state[14] = value>>16 & 0xFF;
+	state[13] = value>>8 & 0xFF;
+	state[12] = value    & 0xFF;
+}
 
 void aes_dump(char *msg, uint8_t *data, int len)
 {
@@ -421,6 +646,62 @@ int aes_encrypt(uint8_t *data, int len, uint8_t *key, uint8_t *w)
         /* save state (cypher) to user buffer */
         for (j = 0; j < 4 * 4; j++)
             data[i + j] = s[j];
+        //printf("Output:\n");
+       // aes_dump("cypher", &data[i], 4 * 4);
+    }
+   
+    return 0;
+}
+
+int aes_encrypt_accel1(uint8_t *data, int len, uint8_t *key, uint8_t *w)
+{
+    //uint8_t w[4 * 4 * 15] = {0}; /* round key */
+    uint8_t s[4 * 4] = {0}; /* state */
+   
+    int nr, i, j;
+
+    /* key expansion */
+    //aes_key_expansion(key, w);
+   
+    /* start data cypher loop over input buffer */
+    for (i = 0; i < len; i += 4 * 4) {
+
+        //printf("Encrypting block at %u ...\n", i);
+
+        /* init state from user buffer (plaintext) */
+        for (j = 0; j < 4 * 4; j++)
+            s[j] = data[i + j];
+       
+        /* start AES cypher loop over all AES rounds */
+        for (nr = 0; nr <= 14; nr++) {
+           
+            //printf(" Round %d:\n", nr);
+           // aes_dump("input", s, 4 * 4);
+           
+            if (nr > 0) {
+                /* do SubBytes */
+                aes_sub_bytes(s);
+               // aes_dump("  sub", s, 4 * 4);
+                /* do ShiftRows */
+                aes_shift_rows(s);
+               // aes_dump("  shift", s, 4 * 4);
+               
+                if (nr < 14) {
+                    /* do MixColumns */
+                    aes_mix_columns_accel1(s);
+                  //  aes_dump("  mix", s, 4 * 4);
+                }
+            }
+           
+            /* do AddRoundKey */
+            aes_add_round_key(s, w, nr);
+           // aes_dump("  round", &w[nr * 4 * 4], 4 * 4);
+            //aes_dump("  state", s, 4 * 4);
+        }
+       
+        /* save state (cypher) to user buffer */
+        for (j = 0; j < 4 * 4; j++)
+            data[i + j] = s[j];
        // printf("Output:\n");
        // aes_dump("cypher", &data[i], 4 * 4);
     }
@@ -428,6 +709,173 @@ int aes_encrypt(uint8_t *data, int len, uint8_t *key, uint8_t *w)
     return 0;
 }
 
+int aes_encrypt_accel2(uint8_t *data, int len, uint8_t *key, uint8_t *w)
+{
+    //uint8_t w[4 * 4 * 15] = {0}; /* round key */
+    uint8_t s[4 * 4] = {0}; /* state */
+   
+    int nr, i, j;
+
+    /* key expansion */
+    //aes_key_expansion(key, w);
+   
+    /* start data cypher loop over input buffer */
+    for (i = 0; i < len; i += 4 * 4) {
+
+        //printf("Encrypting block at %u ...\n", i);
+
+        /* init state from user buffer (plaintext) */
+        for (j = 0; j < 4 * 4; j++)
+            s[j] = data[i + j];
+       
+        /* start AES cypher loop over all AES rounds */
+        for (nr = 0; nr <= 14; nr++) {
+           
+            //printf(" Round %d:\n", nr);
+           // aes_dump("input", s, 4 * 4);
+           
+            if (nr > 0) {
+                /* do SubBytes */
+                aes_sub_bytes(s);
+               // aes_dump("  sub", s, 4 * 4);
+                /* do ShiftRows */
+                aes_shift_rows(s);
+               // aes_dump("  shift", s, 4 * 4);
+               
+                if (nr < 14) {
+                    /* do MixColumns */
+                    aes_mix_columns_accel2(s);
+                  //  aes_dump("  mix", s, 4 * 4);
+                }
+            }
+           
+            /* do AddRoundKey */
+            aes_add_round_key(s, w, nr);
+           // aes_dump("  round", &w[nr * 4 * 4], 4 * 4);
+            //aes_dump("  state", s, 4 * 4);
+        }
+       
+        /* save state (cypher) to user buffer */
+        for (j = 0; j < 4 * 4; j++)
+            data[i + j] = s[j];
+       // printf("Output:\n");
+       // aes_dump("cypher", &data[i], 4 * 4);
+    }
+   
+    return 0;
+}
+
+int aes_encrypt_accel3(uint8_t *data, int len, uint8_t *key, uint8_t *w)
+{
+    //uint8_t w[4 * 4 * 15] = {0}; /* round key */
+    uint8_t s[4 * 4] = {0}; /* state */
+   
+    int nr, i, j;
+
+    /* key expansion */
+    //aes_key_expansion(key, w);
+   
+    /* start data cypher loop over input buffer */
+    for (i = 0; i < len; i += 4 * 4) {
+
+        //printf("Encrypting block at %u ...\n", i);
+
+        /* init state from user buffer (plaintext) */
+        for (j = 0; j < 4 * 4; j++)
+            s[j] = data[i + j];
+       
+        /* start AES cypher loop over all AES rounds */
+        for (nr = 0; nr <= 14; nr++) {
+           
+            //printf(" Round %d:\n", nr);
+           // aes_dump("input", s, 4 * 4);
+           
+            if (nr > 0) {
+                /* do SubBytes */
+                aes_sub_bytes(s);
+               // aes_dump("  sub", s, 4 * 4);
+                /* do ShiftRows */
+                aes_shift_rows(s);
+               // aes_dump("  shift", s, 4 * 4);
+               
+                if (nr < 14) {
+                    /* do MixColumns */
+                    aes_mix_columns_accel3(s);
+                  //  aes_dump("  mix", s, 4 * 4);
+                }
+            }
+           
+            /* do AddRoundKey */
+            aes_add_round_key(s, w, nr);
+           // aes_dump("  round", &w[nr * 4 * 4], 4 * 4);
+            //aes_dump("  state", s, 4 * 4);
+        }
+       
+        /* save state (cypher) to user buffer */
+        for (j = 0; j < 4 * 4; j++)
+            data[i + j] = s[j];
+       // printf("Output:\n");
+       // aes_dump("cypher", &data[i], 4 * 4);
+    }
+   
+    return 0;
+}
+
+int aes_encrypt_accel4(uint8_t *data, int len, uint8_t *key, uint8_t *w)
+{
+    //uint8_t w[4 * 4 * 15] = {0}; /* round key */
+    uint8_t s[4 * 4] = {0}; /* state */
+   
+    int nr, i, j;
+
+    /* key expansion */
+    //aes_key_expansion(key, w);
+   
+    /* start data cypher loop over input buffer */
+    for (i = 0; i < len; i += 4 * 4) {
+
+        //printf("Encrypting block at %u ...\n", i);
+
+        /* init state from user buffer (plaintext) */
+        for (j = 0; j < 4 * 4; j++)
+            s[j] = data[i + j];
+       
+        /* start AES cypher loop over all AES rounds */
+        for (nr = 0; nr <= 14; nr++) {
+           
+            //printf(" Round %d:\n", nr);
+           // aes_dump("input", s, 4 * 4);
+           
+            if (nr > 0) {
+                /* do SubBytes */
+                aes_sub_bytes(s);
+               // aes_dump("  sub", s, 4 * 4);
+                /* do ShiftRows */
+                aes_shift_rows(s);
+               // aes_dump("  shift", s, 4 * 4);
+               
+                if (nr < 14) {
+                    /* do MixColumns */
+                    aes_mix_columns_accel4(s);
+                  //  aes_dump("  mix", s, 4 * 4);
+                }
+            }
+           
+            /* do AddRoundKey */
+            aes_add_round_key(s, w, nr);
+           // aes_dump("  round", &w[nr * 4 * 4], 4 * 4);
+            //aes_dump("  state", s, 4 * 4);
+        }
+       
+        /* save state (cypher) to user buffer */
+        for (j = 0; j < 4 * 4; j++)
+            data[i + j] = s[j];
+       // printf("Output:\n");
+       // aes_dump("cypher", &data[i], 4 * 4);
+    }
+   
+    return 0;
+}
 
 void inv_shift_rows(uint8_t *state)
 {
@@ -535,8 +983,8 @@ int aes_decrypt(uint8_t *data, int len, uint8_t *key)
         /* save state (cypher) to user buffer */
         for (j = 0; j < 4 * 4; j++)
             data[i + j] = s[j];
-        //printf("Output:\n");
-        //aes_dump("plain", &data[i], 4 * 4);
+        printf("Output:\n");
+        aes_dump("plain", &data[i], 4 * 4);
     }
    
     return 0;
@@ -563,34 +1011,6 @@ int aes_decrypt(uint8_t *data, int len, uint8_t *key)
    // aes_decrypt(buf, sizeof(buf), key);
 }*/
 
-/* -----------------------------------------------------------------------------
- * SIGIO signal handler
- */
- 
-void
-sigio_signal_handler(int signo)
-{
-
-    assert(signo == SIGIO);   // Confirm correct signal #
-    sigio_signal_count ++;
-
-    //printf("sigio_signal_handler called (signo=%d)\n", signo);
-	//printf("Updating sigio_signal_count to %d\n",sigio_signal_count);
-
-    /* -------------------------------------------------------------------------
-     * Set global flag
-     */
-     
-    sigio_signal_processed = 1; 
-    
-    /* -------------------------------------------------------------------------
-     * Take end timestamp for interrupt latency measurement
-     */
-    (void)gettimeofday(&sigio_signal_timestamp, NULL); 
-
-
-}
-
 int main()
 {
 	dh = open("/dev/mem", O_RDWR | O_SYNC); // Open /dev/mem which represents the whole physical memory
@@ -598,85 +1018,29 @@ int main()
 		printf("Unable to open /dev/mem\n");
 	}
 	
-	//Creating virtual pointers for the accelerator and ps/pl register areas
     acc_virtual_address  = (uint32_t*)mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, dh, START_ADDRESS); // Memory map AXI Lite register block
+	acc_virtual_address2  = (uint32_t*)mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, dh, 0XA0002000 ); // Memory map AXI Lite register block
+	acc_virtual_address3  = (uint32_t*)mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, dh, 0xB0000000); // Memory map AXI Lite register block
+	acc_virtual_address4  = (uint32_t*)mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, dh, 0XB0002000); // Memory map AXI Lite register block
 	ps_reg 			   = (uint32_t*)mmap(NULL, PL_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, dh, 0xFD1A0000 &~PL_MASK);		//Block for PS clock related register
 	pl_reg 			   = (uint32_t*)mmap(NULL, 0x1000, PROT_READ|PROT_WRITE, MAP_SHARED, dh, 0xFF5E0000 & ~PL_MASK);		//Block for PL clock related register	
-	
-	volatile int rc;
-	
-	/* Register signal handler for SIGIO signal */
-
-    struct sigaction sig_action; 
-    
-    memset(&sig_action, 0, sizeof sig_action);
-    sig_action.sa_handler = sigio_signal_handler;
-
-    /* --------------------------------------------------------------------------
-     *      Block all signals while our signal handler is executing:
-     */
-    (void)sigfillset(&sig_action.sa_mask);
-
-    rc = sigaction(SIGIO, &sig_action, NULL);
-
-    if (rc == -1) {
-        perror("sigaction() failed");
-        return -1;
-    }
-
-    /* -------------------------------------------------------------------------
-     *      Open the device file
-     */ 
-        
-    gpio_dev_fd = open(GPIO_DEV_PATH, O_RDWR);
-
-     if(gpio_dev_fd == -1)    {
-        perror("open() of " GPIO_DEV_PATH " failed");
-        return -1;
-    }    
-
-    /* -------------------------------------------------------------------------
-     * Set our process to receive SIGIO signals from the GPIO device:
-     */
-     
-    rc = fcntl(gpio_dev_fd, F_SETOWN, getpid());
-    
-    if (rc == -1) {
-        perror("fcntl() SETOWN failed\n");
-        return -1;
-    } 
-
-    /* -------------------------------------------------------------------------
-     * Enable reception of SIGIO signals for the gpio_dev_fd descriptor
-     */
-     
-    int fd_flags = fcntl(gpio_dev_fd, F_GETFL);
-        rc = fcntl(gpio_dev_fd, F_SETFL, fd_flags | O_ASYNC);
-
-    if (rc == -1) {
-        perror("fcntl() SETFL failed\n");
-        return -1;
-    } 
-	//
-	
-	//Changing PS and PL freq
-	change_ps_freq(1);
-	change_pl_freq(1);
-	
-	sigio_signal_processed = 0;	//Resetting the signal processed flag
-	/* ---------------------------------------------------------------------
-         * NOTE: This next section of code must be excuted each cycle to prevent
-         * a race condition between the SIGIO signal handler and sigsuspend()
-     */
-         
-    (void)sigfillset(&signal_mask);
-    (void)sigfillset(&signal_mask_most);
-    (void)sigdelset(&signal_mask_most, SIGIO);
-    (void)sigprocmask(SIG_SETMASK,&signal_mask, &signal_mask_old); 
 			  
+	change_ps_freq(0);
+	change_pl_freq(0);
+	
+	int nt = 4;
+
+	#ifdef _OPENMP
+	#pragma omp parallel private(nt)
+	{ nt = omp_get_num_threads(); if(nt<1) printf("NO print, OMP warmup.\n"); }
+	#endif
+	
+	omp_set_num_threads(nt);
+    double time, t0, t1;
+	
 	uint8_t buf[16];//, enc_buf[16], dec_buf[16];
-//	int count = 0;
-//	int ret;
+	//int count = 0;
+	//int ret;
 	unsigned seed = (unsigned) clock();
 	uint8_t key[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
                       0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -690,15 +1054,22 @@ int main()
 	
 	//base test - output should be cypher:  8e a2 b7 ca 51 67 45 bf ea fc 49 90 4b 49 60 89
 //	uint8_t buf2[16] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-  //            0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
+  //           0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
 //	printf("\nAES_CYPHER_256 encrypt test case:\n");
-   // printf("Input:\n");
-   // aes_dump("data", buf2, sizeof(buf2));
-   // aes_dump("key ",  key, sizeof(key));
-   // aes_encrypt(buf2, sizeof(buf2), key, w);
+	//printf("Input:\n");
+  //  aes_dump("data", buf2, sizeof(buf2));
+  //  aes_dump("key ",  key, sizeof(key));
+  //  aes_encrypt(buf2, sizeof(buf2), key, w);
+
+	t0 = gtod_timer();
+	int thread_num; 
+	int i,k;
 	
-	for (int k = 0; k < PAGE_SIZE;	k++){
-		for (int i = 0; i<16; i++){
+	//#pragma omp parallel for default(none) private(i,k,buf,thread_num) shared(seed,key,w) schedule(static)	
+	//#pragma omp parallel for default(none) private(i,k,buf,enc_buf,dec_buf,ret,thread_num) shared(seed,key,w) schedule(dynamic) reduction (+:count)
+	#pragma omp parallel for default(none) private(i,k,buf,thread_num) shared(seed,key,w) schedule(static)	
+	for ( k = 0; k < PAGE_SIZE;	k++){
+		for ( i = 0; i<16; i++){
 			buf[i] = rand_r(&seed)/256;
 		}
 	
@@ -709,29 +1080,44 @@ int main()
 		//printf("Input:\n");
 		//aes_dump("data", buf, sizeof(buf));
 		//aes_dump("key ",  key, sizeof(key));
-		aes_encrypt(buf, sizeof(buf), key, w);
-   
+		
+		thread_num = omp_get_thread_num();
+		if (thread_num == 0) {
+			aes_encrypt_accel1(buf, sizeof(buf), key, w);
+		}
+		else if (thread_num == 1){
+			aes_encrypt_accel2(buf, sizeof(buf), key, w);
+		}
+		else if (thread_num == 2){
+			aes_encrypt_accel3(buf, sizeof(buf), key, w);
+		}
+		else if (thread_num == 3){
+			aes_encrypt_accel4(buf, sizeof(buf), key, w);
+		}
 	
 		//printf("\nAES_CYPHER_256 decrypt test case:\n");
 		//printf("Input:\n");
 		//aes_dump("data", buf, sizeof(buf));
 		//aes_dump("key ",  key, sizeof(key));
-		//aes_decrypt(buf, sizeof(buf), key);
+	//	aes_decrypt(buf, sizeof(buf), key);
 		//aes_dump("dec_buf", buf, sizeof(buf));
 
-		//memcpy(dec_buf,buf,sizeof(buf));
+	//	memcpy(dec_buf,buf,sizeof(buf));
 	
-		//ret = memcmp(enc_buf, dec_buf, sizeof(enc_buf));
+	//	ret = memcmp(enc_buf, dec_buf, sizeof(enc_buf));
 
-		//if(ret != 0) count += 1;
+	//	if(ret != 0) count += 1;
 	}
-	
-	/*if (count != 0) {
+/*	if (count != 0) {
 		printf("Encryption failed %d times\n", count);
 	}
 	else {
 		printf("All encryptions passed\n");
-	}*/
+	} */
+
+	t1 = gtod_timer();
+	time  = t1 - t0;
+	printf("%lf\n",time);
 	
 	return 0;
 }

@@ -44,17 +44,7 @@
 
 #define PAGE_SIZE 65536 //8 - 1Kbits, 1024 - 128Kbits
 
-//icpc -Wall -xHost -O2 -qopenmp rijndael_omp.c -o out2
-
-//
-// Public Definitions
-//
-
 /* moved to rijndael.h */
-
-//
-// Internal Definitions
-//
 
 /*
  * Encryption Rounds
@@ -296,23 +286,9 @@ uint8_t aes_mul_encrypt(uint8_t x, uint8_t y)
 
 void aes_mix_columns(uint8_t *state)
 {
- /*   uint8_t y[16] = { 2, 3, 1, 1,  1, 2, 3, 1,  1, 1, 2, 3,  3, 1, 1, 2};
-    uint8_t s[4];
-    int i, j, r;
-   
-    for (i = 0; i < 4; i++) {
-        for (r = 0; r < 4; r++) {
-            s[r] = 0;
-            for (j = 0; j < 4; j++) {
-                s[r] = s[r] ^ ((((y[r * 4 + j] >> 0) & 1) * state[i * 4 + j]) ^ (((y[r * 4 + j] >> 1) & 1) * ((state[i * 4 + j] << 1) ^ (((state[i * 4 + j] >> 7) & 1) * 0x1b))) );
-            }
-        }
-        for (r = 0; r < 4; r++) {
-            state[i * 4 + r] = s[r];
-        }
-    }
-*/
 	unsigned int valua;
+	//Making start bit of accelerator to zero
+	//Making it 1 will start the trigger to do the mix columns
 	pm_call(0XA0000000,0x20,0x0, 0, acc_virtual_address);
 	valua = (state[3]<<24)|(state[2]<<16)|(state[1]<<8)|(state[0]);
 	pm_call(0xA0000000,0x0,valua,0, acc_virtual_address);
@@ -322,15 +298,16 @@ void aes_mix_columns(uint8_t *state)
 	pm_call(0xA0000000,0x8,valua,0, acc_virtual_address);
 	valua = (state[15]<<24)|(state[14]<<16)|(state[13]<<8)|(state[12]);
 	pm_call(0xA0000000,0xC,valua,0, acc_virtual_address);
-	pm_call(0XA0000000,0x20,0x1, 0, acc_virtual_address);
+	//Above 4 pm calls send 4 32-bit values
+	pm_call(0XA0000000,0x20,0x1, 0, acc_virtual_address);	//Start the conversion
 	int value = 0;
-	while(value!=1) {
+	while(value!=1) {	//Polling for done bit the status register from accelerator
     value = dm_call_ret(0XA0000000,0x1,0, acc_virtual_address);
 	//printf("Value returned is %x\n",value);
 	value = (value << 1) && 1;
 	}
 	
-	//Mix Column Values
+	//Mix Column Values being read back
 	value = dm_call_ret(0XA0000000,0x10,0x1, acc_virtual_address);
 	//printf("Value returned is %x\n",value);
 	state[3] = value>>24 & 0xFF;
@@ -571,8 +548,8 @@ int main()
 	ps_reg 			   = (uint32_t*)mmap(NULL, PL_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, dh, 0xFD1A0000 &~PL_MASK);		//Block for PS clock related register
 	pl_reg 			   = (uint32_t*)mmap(NULL, 0x1000, PROT_READ|PROT_WRITE, MAP_SHARED, dh, 0xFF5E0000 & ~PL_MASK);		//Block for PL clock related register	
 			  
-	change_ps_freq(0);
-	change_pl_freq(0);
+	change_ps_freq(1);
+	change_pl_freq(1);
 			  
 	uint8_t buf[16];//, enc_buf[16], dec_buf[16];
 //	int count = 0;
