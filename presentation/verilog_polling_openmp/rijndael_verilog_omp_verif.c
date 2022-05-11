@@ -47,7 +47,8 @@ double gtod_secbase = 0.0E0;
 
 #define PAGE_SIZE 65536 //8 - 1Kbits, 1024 - 128Kbits
 
-//icpc -Wall -xHost -O2 -qopenmp rijndael_omp.c -o out2
+//icpc -Wall -xHost -O2 -qopenmp rijndael_omp.c -o out2 (dont use)
+//g++ -Wall -fopenmp rijndael_verilog_omp.c -o out
 
 double gtod_timer()
 {
@@ -669,7 +670,7 @@ int main()
 	change_ps_freq(0);
 	change_pl_freq(0);
 	
-	int nt = 16;
+	int nt = 4;
 
 	#ifdef _OPENMP
 	#pragma omp parallel private(nt)
@@ -679,9 +680,9 @@ int main()
 	omp_set_num_threads(nt);
     double time, t0, t1;
 	
-	uint8_t buf[16];//, enc_buf[16], dec_buf[16];
-//	int count = 0;
-//	int ret;
+	uint8_t buf[16], enc_buf[16], dec_buf[16];
+	int count = 0;
+	int ret;
 	unsigned seed = (unsigned) clock();
 	uint8_t key[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
                       0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -705,16 +706,15 @@ int main()
 	t0 = gtod_timer();
 	int thread_num; 
 	int i,k;
-//	#pragma omp parallel for default(none) private(i,k,buf) shared(seed,key,w) schedule(static)	
-//	#pragma omp parallel for default(none) private(i,k,buf,enc_buf,dec_buf,ret,thread_num) shared(seed,key,w) schedule(dynamic) reduction (+:count)
 	
-	#pragma omp parallel for default(none) private(i,k,buf,thread_num) shared(seed,key,w) schedule(static)	
+	//#pragma omp parallel for default(none) private(i,k,buf,thread_num) shared(seed,key,w) schedule(static)
+	#pragma omp parallel for default(none) private(i,k,buf,enc_buf,dec_buf,ret,thread_num) shared(seed,key,w) schedule(dynamic) reduction (+:count)
 	for ( k = 0; k < PAGE_SIZE;	k++){
 		for ( i = 0; i<16; i++){
 			buf[i] = rand_r(&seed)/256;
 		}
 	
-//		memcpy(enc_buf,buf,sizeof(buf));
+		memcpy(enc_buf,buf,sizeof(buf));
 		//aes_dump("enc_buf", enc_buf, sizeof(enc_buf));
 
 		//printf("\nAES_CYPHER_256 encrypt test case:\n");
@@ -734,22 +734,22 @@ int main()
 		//printf("Input:\n");
 		//aes_dump("data", buf, sizeof(buf));
 		//aes_dump("key ",  key, sizeof(key));
-//		aes_decrypt(buf, sizeof(buf), key);
+		aes_decrypt(buf, sizeof(buf), key);
 		//aes_dump("dec_buf", buf, sizeof(buf));
 
-//		memcpy(dec_buf,buf,sizeof(buf));
+		memcpy(dec_buf,buf,sizeof(buf));
 	
-//		ret = memcmp(enc_buf, dec_buf, sizeof(enc_buf));
+		ret = memcmp(enc_buf, dec_buf, sizeof(enc_buf));
 
-//		if(ret != 0) count += 1;
+		if(ret != 0) count += 1;
 	}
-/*	if (count != 0) {
+	if (count != 0) {
 		printf("Encryption failed %d times\n", count);
 	}
 	else {
 		printf("All encryptions passed\n");
 	}
-*/	
+	
 	t1 = gtod_timer();
 	time  = t1 - t0;
 	printf("%lf\n",time);
