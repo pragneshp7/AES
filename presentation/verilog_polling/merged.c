@@ -548,8 +548,8 @@ int main()
 	ps_reg 			   = (uint32_t*)mmap(NULL, PL_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, dh, 0xFD1A0000 &~PL_MASK);		//Block for PS clock related register
 	pl_reg 			   = (uint32_t*)mmap(NULL, 0x1000, PROT_READ|PROT_WRITE, MAP_SHARED, dh, 0xFF5E0000 & ~PL_MASK);		//Block for PL clock related register	
 			  
-	change_ps_freq(1);
-	change_pl_freq(1);
+	change_ps_freq(0);
+	change_pl_freq(0);
 			  
 	uint8_t buf[16];//, enc_buf[16], dec_buf[16];
 //	int count = 0;

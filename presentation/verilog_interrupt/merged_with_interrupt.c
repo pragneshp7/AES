@@ -660,8 +660,8 @@ int main()
 	//
 	
 	//Changing PS and PL freq
-	change_ps_freq(1);
-	change_pl_freq(1);
+	change_ps_freq(0);
+	change_pl_freq(0);
 	
 	sigio_signal_processed = 0;	//Resetting the signal processed flag
 	/* ---------------------------------------------------------------------
