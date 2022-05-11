@@ -6,10 +6,7 @@
  *  UPDATED:    May 2, 2017     Updated for ZED Board
  *  UPDATED:    Feb 5, 2021     Updated for the ULTRA96
  *
- *  DESCRIPTION: This kernel module registers interrupts from GPIO
- *               port and measures the time between them. This is
- *               used to also measure the latency through the kernel
- *               to respond to interrupts. 
+ *  DESCRIPTION: This kernel module registers interrupts from aes_mix_columns module we added
  *               
  *  DEPENDENCIES: Works on the AVNET Ultra96 Board
  *
