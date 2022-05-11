@@ -1,1 +1,0 @@
-cmd_/home/ee382n/presentation/verilog_interrupt/gpio_int.ko := ld -EL -r  -maarch64linux -T ./scripts/module-common.lds --build-id  -o /home/ee382n/presentation/verilog_interrupt/gpio_int.ko /home/ee382n/presentation/verilog_interrupt/gpio_int.o /home/ee382n/presentation/verilog_interrupt/gpio_int.mod.o ;  true
