@@ -5,7 +5,7 @@
 #include <string.h>
 #include "rijndael.h"
 
-#define PAGE_SIZE 8 //8 - 1Kbits, 1024 - 128Kbits
+#define PAGE_SIZE 65536 //8 - 1Kbits, 1024 - 128Kbits
 
 //icpc -Wall -xHost -O2 -qopenmp rijndael_omp.c -o out2
 
