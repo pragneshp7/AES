@@ -1,4 +1,4 @@
-AES, Advanced Encryption Standard, is actually a set of standards: FIPS 197 , and the AES algorithm we call is actually the Rijndael algorithm.
+AES, Advanced Encryption Standard, is actually a set of standards: FIPS 197, and the AES algorithm we call is actually the Rijndael algorithm.
 
 NIST (National INstitute of Standards and Technology) publicly solicited more efficient and secure alternative DES encryption algorithms on September 12, 1997. A total of 15 algorithms were selected in the first round, of which 5 algorithms were shortlisted for the finals, namely MARS, RC6 , Rijndael, Serpent and Twofish. After three years of verification, evaluation and public discussion, the Rijndael algorithm was finally selected.
 
@@ -15,6 +15,8 @@ In the AES/presentation folder several different implementations can be found wi
 
 The AES/verilog_files folder contains the Verilog files of the hardware accelerator.
 
-The AES/hls folder contains the HLS files required to generate the hardware accelerator
+The AES/hls folder contains the HLS files required to generate the hardware accelerator.
+
+Please contact me at prp1998@utexas.edu if you have any questions.
 
 
